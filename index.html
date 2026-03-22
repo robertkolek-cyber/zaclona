@@ -74,174 +74,185 @@ for (let i = 0; i < NUM_FOLDS; i++) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  INTERACTION STATE
+//  SPRING-MASS PHYSICS — each fold is a damped oscillator
+//  coupled to neighbours via tension (like real fabric).
+//  Wind uses beating frequencies for organic swells/calms.
 // ═══════════════════════════════════════════════════════
 
-// ── Opening gust: strong breeze that decays over ~4 seconds ──
-const startTime  = performance.now();
-const gustDecay  = 4.0;   // seconds to calm down
-const gustPeak   = 4.5;   // multiplier on top of normal breeze
+const startTime = performance.now();
 
 // ── Mouse interaction ────────────────────────────────
-// Track mouse position + velocity. The velocity creates a push
-// force on nearby folds, like a hand brushing through fabric.
-let mouseX  = -1;   // normalized 0..1, -1 = not on screen
+let mouseX  = -1;
 let mouseY  = -1;
-let mouseVX = 0;    // velocity (normalized units per second)
+let mouseVX = 0;
 let mouseVY = 0;
 let prevMouseX = -1;
 let prevMouseY = -1;
 let lastMouseTime = 0;
 
-// Per-fold mouse push force (decays over time)
-const mousePush = new Float32Array(NUM_FOLDS);
-
 canvas.addEventListener('mousemove', (e) => {
   const now = performance.now() * 0.001;
   const nx  = e.clientX / innerWidth;
   const ny  = e.clientY / innerHeight;
-
   if (prevMouseX >= 0) {
     const dt = Math.max(0.001, now - lastMouseTime);
     mouseVX  = (nx - prevMouseX) / dt;
     mouseVY  = (ny - prevMouseY) / dt;
   }
-
-  mouseX = nx;
-  mouseY = ny;
-  prevMouseX = nx;
-  prevMouseY = ny;
+  mouseX = nx; mouseY = ny;
+  prevMouseX = nx; prevMouseY = ny;
   lastMouseTime = now;
 });
 
 canvas.addEventListener('mouseleave', () => {
-  mouseX = -1;
-  mouseY = -1;
-  prevMouseX = -1;
-  prevMouseY = -1;
-  mouseVX = 0;
-  mouseVY = 0;
+  mouseX = -1; mouseY = -1;
+  prevMouseX = -1; prevMouseY = -1;
+  mouseVX = 0; mouseVY = 0;
 });
 
-// Touch support
 canvas.addEventListener('touchmove', (e) => {
   e.preventDefault();
   const touch = e.touches[0];
   const now   = performance.now() * 0.001;
   const nx    = touch.clientX / innerWidth;
   const ny    = touch.clientY / innerHeight;
-
   if (prevMouseX >= 0) {
     const dt = Math.max(0.001, now - lastMouseTime);
     mouseVX  = (nx - prevMouseX) / dt;
     mouseVY  = (ny - prevMouseY) / dt;
   }
-
-  mouseX = nx;
-  mouseY = ny;
-  prevMouseX = nx;
-  prevMouseY = ny;
+  mouseX = nx; mouseY = ny;
+  prevMouseX = nx; prevMouseY = ny;
   lastMouseTime = now;
 }, { passive: false });
 
 canvas.addEventListener('touchend', () => {
-  mouseX = -1;
-  mouseY = -1;
-  prevMouseX = -1;
-  prevMouseY = -1;
-  mouseVX = 0;
-  mouseVY = 0;
+  mouseX = -1; mouseY = -1;
+  prevMouseX = -1; prevMouseY = -1;
+  mouseVX = 0; mouseVY = 0;
 });
 
-// ─── Breeze — natural wind physics ────────────────────
-//
-// Real wind through a curtain:
-// 1. Mostly still — long calm, then a gust
-// 2. One direction — pushes OUT (positive), gravity pulls back
-// 3. Traveling wave — hits left side first, ripples right
-// 4. Asymmetric — slow push out, faster fall back
-// 5. Irregular — never perfectly periodic
-//
-// We simulate this with layered sine waves at IRRATIONAL frequency
-// ratios (so they never repeat), clamped to be mostly positive
-// (wind pushes one way, gravity returns), and staggered across
-// folds to create a traveling wave.
+// ─── Spring-mass state ───────────────────────────────
+const foldPos = new Float32Array(NUM_FOLDS);  // displacement from rest
+const foldVel = new Float32Array(NUM_FOLDS);  // velocity
 
-function windForce(t) {
-  // Layer sine waves at irrational ratios — never repeats
-  const raw = (
-    Math.sin(t * 0.31)                  * 0.40 +
-    Math.sin(t * 0.31 * Math.SQRT2)     * 0.30 +  // √2 ratio
-    Math.sin(t * 0.31 * Math.PI)        * 0.20 +  // π ratio
-    Math.sin(t * 0.31 * 2.236)          * 0.10     // √5 ratio
-  );
+// Physics constants
+const springK   = 2.8;    // spring stiffness (pulls back to rest)
+const damping   = 1.6;    // velocity damping (energy loss)
+const tensionK  = 12.0;   // neighbour coupling (fabric tension)
+const windScale = 0.12;   // overall wind strength
 
-  // Clamp mostly positive: wind pushes curtain out (into room),
-  // gravity pulls it back. Only ~20% of the time does it go negative.
-  // max(raw, raw*0.15) keeps the negative excursions very small.
-  const biased = raw > 0 ? raw : raw * 0.15;
-
-  return biased * 0.10;
+// Opening gust — give folds an initial push
+for (let i = 0; i < NUM_FOLDS; i++) {
+  const wave = Math.sin(i * 0.45 + 0.5);
+  foldVel[i] = wave * 0.8 * FOLDS[i].weight;
+  foldPos[i] = wave * 0.015;
 }
 
-const swingRaw    = new Float32Array(NUM_FOLDS);
+// ─── Wind — beating frequencies for organic rhythm ───
+// Two close frequencies create amplitude modulation (beats).
+// The "envelope" swells and fades like real gusts.
+// Multiple beat pairs at different scales = complex, never-repeating wind.
+function windForce(t) {
+  // Beat pair 1: slow swell (~12s cycle)
+  const beat1 = Math.sin(t * 0.27) * Math.sin(t * 0.31);
+  // Beat pair 2: medium swell (~7s cycle)
+  const beat2 = Math.sin(t * 0.43) * Math.sin(t * 0.51);
+  // Beat pair 3: fast flutter (~3s cycle)
+  const beat3 = Math.sin(t * 0.97) * Math.sin(t * 1.13);
+
+  // Combine with decreasing weights
+  const raw = beat1 * 0.50 + beat2 * 0.30 + beat3 * 0.15;
+
+  // Bias positive: wind pushes out, gravity returns
+  // Soft rectification — keeps some negative (fabric settles past rest)
+  const biased = raw > 0 ? raw : raw * 0.08;
+
+  // Add very slow drift so calm periods vary in length
+  const drift = Math.sin(t * 0.07) * 0.15 + 0.15;
+
+  return (biased + drift * 0.3) * windScale;
+}
+
+// Smooth wind output (per-fold)
 const swingSmooth = new Float32Array(NUM_FOLDS);
 
 function computeSwings(t, dt) {
-  // ── Opening gust ─────────────────────────────────
-  const elapsed  = (performance.now() - startTime) * 0.001;
-  const gustMult = 1.0 + gustPeak * Math.exp(-elapsed / gustDecay)
-                       * Math.max(0, Math.sin(elapsed * 3.5));
+  // Clamp dt for stability
+  const stepDt = Math.min(dt, 0.033);
+  // Sub-step for stability at high dt
+  const steps = Math.ceil(stepDt / 0.008);
+  const subDt = stepDt / steps;
 
-  // ── Mouse push ───────────────────────────────────
-  if (mouseX >= 0) {
-    const pushDir   = mouseVX;
-    const influence = 0.20;
+  for (let step = 0; step < steps; step++) {
+    const subT = t - (steps - 1 - step) * subDt;
 
+    // ── Opening gust decay ─────────────────────────
+    const elapsed = (performance.now() - startTime) * 0.001;
+    const gustMult = 1.0 + 3.5 * Math.exp(-elapsed / 3.0);
+
+    // ── Compute forces per fold ────────────────────
     for (let i = 0; i < NUM_FOLDS; i++) {
-      const foldNX = FOLDS[i].relPos;
-      const dist   = Math.abs(foldNX - mouseX);
-      if (dist < influence) {
-        const falloff = 1 - (dist / influence);
-        const f2      = falloff * falloff;
+      // Wind with traveling wave delay
+      const delay = FOLDS[i].relPos * 0.5;
+      const wind  = windForce(subT - delay) * gustMult * FOLDS[i].weight;
 
-        // Proximity: folds part around cursor
-        const direction = Math.sign(foldNX - mouseX) || 1;
-        mousePush[i] += direction * f2 * dt * 8.0;
+      // Spring: pulls fold back to rest (pos=0)
+      const spring = -springK * foldPos[i];
 
-        // Velocity: swiping pushes hard
-        mousePush[i] += pushDir * f2 * dt * 18.0;
+      // Damping: asymmetric — slower push out, faster snap back
+      // This creates the natural "billow then settle" motion
+      const dampDir = foldVel[i] > 0 ? damping * 0.7 : damping * 1.3;
+      const damp = -dampDir * foldVel[i];
+
+      // Neighbour tension: fabric is connected, pulls toward neighbours
+      const left  = i > 0 ? foldPos[i-1] : 0;
+      const right = i < NUM_FOLDS - 1 ? foldPos[i+1] : 0;
+      const tension = tensionK * (left + right - 2 * foldPos[i]);
+
+      // Mouse force
+      let mouseForce = 0;
+      if (mouseX >= 0) {
+        const foldNX = FOLDS[i].relPos;
+        const dist   = Math.abs(foldNX - mouseX);
+        const influence = 0.22;
+        if (dist < influence) {
+          const falloff = 1 - dist / influence;
+          const f2 = falloff * falloff;
+
+          // Proximity push: folds part around cursor
+          const dir = Math.sign(foldNX - mouseX) || 1;
+          mouseForce += dir * f2 * 12.0;
+
+          // Velocity push: swiping drags folds along
+          mouseForce += mouseVX * f2 * 25.0;
+        }
       }
+
+      // Tiny flutter: fabric edge trembling
+      const flutter = Math.sin(subT * 4.7 + FOLDS[i].phase) * 0.08
+                    + Math.sin(subT * 7.3 + FOLDS[i].phase * 1.7) * 0.04;
+
+      // Sum all forces → acceleration
+      const accel = wind + spring + damp + tension * 0.01 + mouseForce + flutter * 0.1;
+      foldVel[i] += accel * subDt;
+      foldPos[i] += foldVel[i] * subDt;
     }
   }
 
+  // ── Transfer physics displacement to swing values ──
+  // 3-pass smooth for fabric continuity
   for (let i = 0; i < NUM_FOLDS; i++) {
-    mousePush[i] *= Math.pow(0.015, dt);
+    swingSmooth[i] = foldPos[i];
   }
-
-  // ── Traveling wave: wind arrives at each fold with a slight delay
-  // based on position. Left folds get hit first, wave travels right.
-  // Delay is small (~0.4s across the full width) — creates a ripple.
-  const waveSpeed = 0.4;  // seconds for wave to cross full curtain
-
-  for (let i = 0; i < NUM_FOLDS; i++) {
-    const foldNX  = FOLDS[i].relPos;
-    const delay   = foldNX * waveSpeed;  // left=0 delay, right=0.4s delay
-
-    const wind    = windForce(t - delay) * gustMult;
-    const micro   = Math.sin(t * 0.6 + FOLDS[i].phase) * 0.002;
-
-    swingRaw[i] = (wind + micro) * FOLDS[i].weight + mousePush[i] * 0.06;
-  }
-
-  // ── Neighbour propagation ────────────────────────
+  const tmp = new Float32Array(NUM_FOLDS);
   for (let pass = 0; pass < 3; pass++) {
-    const src = pass === 0 ? swingRaw : swingSmooth;
     for (let i = 0; i < NUM_FOLDS; i++) {
-      const prev = i > 0             ? src[i-1] : src[i];
-      const next = i < NUM_FOLDS - 1 ? src[i+1] : src[i];
-      swingSmooth[i] = src[i] * 0.50 + prev * 0.25 + next * 0.25;
+      const prev = i > 0 ? swingSmooth[i-1] : swingSmooth[i];
+      const next = i < NUM_FOLDS - 1 ? swingSmooth[i+1] : swingSmooth[i];
+      tmp[i] = swingSmooth[i] * 0.55 + prev * 0.225 + next * 0.225;
     }
+    for (let i = 0; i < NUM_FOLDS; i++) swingSmooth[i] = tmp[i];
   }
 }
 
