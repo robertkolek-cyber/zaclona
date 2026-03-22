@@ -160,7 +160,7 @@ function lightAt(nx) {
     const sigma = Math.sqrt(s2);
     const hd    = d - sigma * 0.68;
     const hs2   = s2 * 0.25;
-    light += (FOLDS[i].depth * 1.00) / (1 + (hd * hd) / hs2);
+    light += (FOLDS[i].depth * 5.00) / (1 + (hd * hd) / hs2);
   }
 
   return light;
