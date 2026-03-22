@@ -154,11 +154,18 @@ canvas.addEventListener('touchend', () => {
 });
 
 // ─── Breeze with gust + mouse + neighbour propagation ─
-function baseSwing(t, phase) {
+//
+// Real breeze: wind pushes ALL folds in the SAME direction at the
+// same time. The main wave is global. Each fold only gets a tiny
+// individual offset so they're not perfectly rigid — like real fabric
+// has micro-variations but the overall motion is coherent.
+
+function globalWind(t) {
+  // One unified wind force — all folds feel the same push
   return (
-    Math.sin(t * 0.55 + phase)               * 0.060 +
-    Math.sin(t * 1.15 + phase * 1.8 + 1.4)  * 0.028 +
-    Math.sin(t * 0.22 + phase * 0.7 + 2.8)  * 0.042
+    Math.sin(t * 0.50)        * 0.065 +
+    Math.sin(t * 1.10 + 1.4)  * 0.030 +
+    Math.sin(t * 0.20 + 2.8)  * 0.045
   );
 }
 
@@ -166,37 +173,48 @@ const swingRaw    = new Float32Array(NUM_FOLDS);
 const swingSmooth = new Float32Array(NUM_FOLDS);
 
 function computeSwings(t, dt) {
-  // ── Opening gust multiplier ──────────────────────
+  // ── Opening gust ─────────────────────────────────
   const elapsed  = (performance.now() - startTime) * 0.001;
   const gustMult = 1.0 + gustPeak * Math.exp(-elapsed / gustDecay)
-                       * (0.5 + 0.5 * Math.sin(elapsed * 3.5)); // ripple during gust
+                       * (0.5 + 0.5 * Math.sin(elapsed * 3.5));
 
-  // ── Update mouse push per fold ───────────────────
-  // Mouse velocity creates a lateral force on nearby folds
+  // ── Mouse push ───────────────────────────────────
+  // Both position AND velocity push folds. Just hovering near a fold
+  // displaces it (like a hand near fabric), velocity adds extra force.
   if (mouseX >= 0) {
-    const pushStrength = Math.min(4, Math.abs(mouseVX)) * Math.sign(mouseVX);
-    const influence    = 0.12;  // how wide the mouse affects (in normalized x)
+    const speed        = Math.sqrt(mouseVX * mouseVX + mouseVY * mouseVY);
+    const pushDir      = mouseVX;  // horizontal push direction
+    const influence    = 0.20;     // wider radius of effect
 
     for (let i = 0; i < NUM_FOLDS; i++) {
       const foldNX = FOLDS[i].relPos;
       const dist   = Math.abs(foldNX - mouseX);
       if (dist < influence) {
         const falloff = 1 - (dist / influence);
-        // Stronger push from faster mouse, scaled by how close the fold is
-        mousePush[i] += pushStrength * falloff * falloff * dt * 2.5;
+        const f2      = falloff * falloff;
+
+        // Proximity push: just being near displaces the fold
+        const direction = Math.sign(foldNX - mouseX) || 1;
+        mousePush[i] += direction * f2 * dt * 8.0;
+
+        // Velocity push: swiping adds a strong directional force
+        mousePush[i] += pushDir * f2 * dt * 18.0;
       }
     }
   }
 
-  // Decay mouse push
+  // Decay: fast but not instant — fabric springs back
   for (let i = 0; i < NUM_FOLDS; i++) {
-    mousePush[i] *= Math.pow(0.03, dt);  // ~97% decay per second → snappy return
+    mousePush[i] *= Math.pow(0.015, dt);  // ~98.5% decay/sec
   }
 
-  // ── Combine base swing + gust + mouse ───────────
+  // ── Combine: global wind + tiny per-fold variation + mouse ──
+  const wind = globalWind(t) * gustMult;
+
   for (let i = 0; i < NUM_FOLDS; i++) {
-    const base  = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight;
-    swingRaw[i] = base * gustMult + mousePush[i] * 0.035;
+    // Small per-fold offset: ±5% variation so they're not perfectly rigid
+    const micro = Math.sin(t * 0.8 + FOLDS[i].phase) * 0.003;
+    swingRaw[i] = (wind + micro) * FOLDS[i].weight + mousePush[i] * 0.06;
   }
 
   // ── Neighbour propagation ────────────────────────
