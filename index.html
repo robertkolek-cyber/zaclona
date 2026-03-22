@@ -193,29 +193,30 @@ function draw(ms) {
       const lum = lightAt(nx) * vertLight;
       const l   = Math.max(0, Math.min(1.20, lum));
 
-      // ── Moving morning sun ────────────────────────
-      // Slow arc from lower-right upward — ~3 min cycle
-      const sunX = 0.60 + Math.sin(t * 0.035) * 0.12;
-      const sunY = 0.62 + Math.cos(t * 0.035) * 0.18;
+      // ── Directional morning light ─────────────────
+      // Sun comes from lower-right, washing warm across the fabric.
+      // Not a spotlight — a wide diagonal gradient that slowly shifts
+      // as if clouds are drifting or the sun is climbing.
 
-      const sx = nx - sunX;
-      const sy = ny - sunY;
+      // Diagonal warm zone: higher = more warm light hitting this point
+      // Breathes slowly — the warm edge creeps up then recedes
+      const breathe   = Math.sin(t * 0.06) * 0.12 + Math.sin(t * 0.025) * 0.08;
+      const warmZone  = nx * 0.35 + (1.0 - ny) * 0.45 + breathe;
+      // Smoothstep into [0,1] — the transition from cool to warm
+      const warmRaw   = Math.max(0, Math.min(1, (warmZone - 0.20) / 0.55));
+      const warmth    = warmRaw * warmRaw * (3 - 2 * warmRaw); // smoothstep
 
-      // Main sun glow — large soft peach circle
-      const sunGlow = Math.exp(-(sx*sx*1.8 + sy*sy*2.2)) * 0.50;
-      // Tighter bright core
-      const sunCore = Math.exp(-(sx*sx*5.0 + sy*sy*6.0)) * 0.25;
+      // Only apply peach where fabric is actually lit (l > 0.5)
+      const peach = warmth * Math.max(0, Math.min(1, (l - 0.3) / 0.5));
 
-      const peach = (sunGlow + sunCore) * l;  // only shows where fabric is lit
-
-      // ── Navy shadow → white → peachy highlight ────
+      // ── Navy → white, with peach where the sun washes through ──
       // Shadow: navy   rgb(55, 65, 105)
-      // Mid:    white  rgb(255, 255, 255)
-      // Sun areas get peach boost on top
+      // Peak:   white  rgb(255, 255, 255)
+      // Sun wash adds peach on the lit warm side
 
-      const r = Math.min(255, Math.round(55 + l * 200 + peach * 60));
-      const g = Math.min(255, Math.round(65 + l * 190 + peach * 32));
-      const b = Math.min(255, Math.round(105 + l * 150 - peach * 15));
+      const r = Math.min(255, Math.round(55 + l * 200 + peach * 48));
+      const g = Math.min(255, Math.round(65 + l * 190 + peach * 25));
+      const b = Math.min(255, Math.round(105 + l * 150 - peach * 20));
       const a = Math.round(Math.min(255, 150 + (1 - Math.min(1, l)) * 62));
 
       const idx   = (y * SW + x) * 4;
