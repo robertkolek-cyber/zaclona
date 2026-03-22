@@ -46,7 +46,7 @@ for (let i = 0; i < NUM_FOLDS; i++) {
   const isMain = i % 2 === 0;
   FOLDS.push({
     relPos: 0.02 + nx * 0.96,
-    sigmaT: isMain ? 0.010 : 0.007,
+    sigmaT: isMain ? 0.028 : 0.020,
     sigmaB: isMain ? 0.055 : 0.038,
     depth:  isMain ? 0.48  : 0.30,
     phase:  (i * 1.37) % (Math.PI * 2),   // golden-ratio-ish stagger
@@ -106,8 +106,8 @@ function precomputeRow(ny) {
   for (let i = 0; i < NUM_FOLDS; i++) {
     const f     = FOLDS[i];
     const fx    = f.relPos + swingSmooth[i] * totalHang;
-    // Sigma widens from top to bottom — cubic for dramatic spread at hem
-    const blend = ny * ny;  // quadratic: tight most of the way, then quickly opens
+    // Sigma widens gently — soft at top, wider at bottom
+    const blend = Math.pow(ny, 0.7);  // opens early, already soft near rod
     const sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
     ROW_DATA[i * 2]     = fx;
     ROW_DATA[i * 2 + 1] = sigma * sigma;
