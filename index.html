@@ -23,17 +23,40 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ─── Dense mesh ──────────────────────────────────────
-const COLS = 280;
-const ROWS = 220;
+const COLS = 300;
+const ROWS = 240;
 
-// ─── Contrast curve — soft in mid-tones, sharp at edges
-// Pulls shadows deeper and keeps highlights clean
-function contrast(x, power) {
-  // x in [0,1], power > 1 increases contrast at extremes
-  return x < 0.5
-    ? 0.5 * Math.pow(2 * x, power)
-    : 1 - 0.5 * Math.pow(2 * (1 - x), power);
+// ─── Silk shading model ───────────────────────────────
+// facing ∈ [0,1]: 0 = edge-on (shadow), 1 = face-on (peak)
+//
+// Silk is cool-neutral. Shadow: blue-grey. Peak: pure white.
+// Strong specular spike right at the highlight — that's what
+// makes silk look like silk instead of cotton.
+
+function shadeColor(facing) {
+  // Diffuse channel: shadow → white
+  // Shadow has a cool cast (more blue than red)
+  const sR = 155, sG = 158, sB = 168;  // cool grey shadow
+  const hR = 255, hG = 255, hB = 255;  // pure white peak
+
+  // Soft diffuse base
+  const diffuse = Math.pow(facing, 1.4);  // slight roll-off
+
+  let r = sR + diffuse * (hR - sR);
+  let g = sG + diffuse * (hG - sG);
+  let b = sB + diffuse * (hB - sB);
+
+  // Specular spike — silk catches a sharp highlight near peak
+  // Only activates when facing > 0.72
+  const specFacing = Math.max(0, (facing - 0.72) / 0.28);
+  const spec = Math.pow(specFacing, 3.5) * 38;
+
+  // Specular is slightly cool-white (silk sheen)
+  r = Math.min(255, r + spec * 0.90);
+  g = Math.min(255, g + spec * 0.92);
+  b = Math.min(255, b + spec * 1.00);  // fractionally more blue in spec
+
+  return [Math.round(r), Math.round(g), Math.round(b)];
 }
 
 // ─── Displacement ────────────────────────────────────
@@ -41,26 +64,38 @@ function xDisplace(col, y, H, t) {
   const nx = col / COLS;
   const ny = y / H;
 
-  // Hang: top is pinned, bottom is free — gentle curve
-  const hang = Math.pow(ny, 0.55);
+  // Silk hangs lightly — bottom floats, top pinned
+  const hang = Math.pow(ny, 0.45);   // softer curve than linen
 
-  // ── Static creases — softer amplitude than before ──
-  // Fewer harmonics, gentler — crease lines are subtle undulations
-  const crease =
-    Math.sin(nx * Math.PI * 5.0 + 0.30) * 34 +
-    Math.sin(nx * Math.PI * 11.0 + 1.7) * 15 +
-    Math.sin(nx * Math.PI * 21.0 + 3.1) *  5;
+  // ── Main folds — elegant, fewer, wider ──
+  // Silk drapes in large smooth waves, not tight gathers
+  const fold =
+    Math.sin(nx * Math.PI * 3.5 + 0.4)  * 38 +   // large primary folds
+    Math.sin(nx * Math.PI * 7.0 + 1.8)  * 16 +   // secondary folds
+    Math.sin(nx * Math.PI * 14.0 + 3.3) *  5;    // fine surface detail
 
-  // ── Breeze — layered traveling waves ──
-  // Three frequencies, slightly different speeds, out of phase
-  const b1 = Math.sin(ny * 3.8  - t * 0.80 + nx * Math.PI * 2.5)        * 30 * hang;
-  const b2 = Math.sin(ny * 7.2  - t * 0.55 + nx * Math.PI * 4.8 + 1.4)  * 16 * hang;
-  const b3 = Math.sin(ny * 13.5 - t * 1.10 + nx * Math.PI * 8.2 + 2.8)  *  7 * hang;
+  // ── Breeze — light and quick, silk catches air easily ──
+  const b1 = Math.sin(ny * 3.2  - t * 1.00 + nx * Math.PI * 2.2)        * 28 * hang;
+  const b2 = Math.sin(ny * 6.5  - t * 0.65 + nx * Math.PI * 4.0 + 1.6)  * 14 * hang;
+  const b3 = Math.sin(ny * 11.8 - t * 1.40 + nx * Math.PI * 7.5 + 2.9)  *  6 * hang;
 
-  // ── Whole-cloth slow swell (breathing) ──
-  const swell = Math.sin(t * 0.28 + nx * Math.PI * 1.8 + 0.5) * 14 * hang;
+  // ── Full-cloth swell — slow and elegant ──
+  const swell = Math.sin(t * 0.22 + nx * Math.PI * 1.5 + 0.8) * 18 * hang;
 
-  return crease + b1 + b2 + b3 + swell;
+  return fold + b1 + b2 + b3 + swell;
+}
+
+// ─── Build grid ───────────────────────────────────────
+function buildGrid(W, H, t) {
+  const grid = [];
+  for (let c = 0; c <= COLS; c++) {
+    const strip = new Float32Array(ROWS + 1);
+    for (let r = 0; r <= ROWS; r++) {
+      strip[r] = (c / COLS) * W + xDisplace(c, (r / ROWS) * H, H, t);
+    }
+    grid.push(strip);
+  }
+  return grid;
 }
 
 // ─── Draw ─────────────────────────────────────────────
@@ -71,20 +106,9 @@ function draw(ms) {
 
   ctx.clearRect(0, 0, W, H);
 
-  const colW = W / COLS; // nominal column width
+  const colW = W / COLS;
+  const grid = buildGrid(W, H, t);
 
-  // Build displaced grid — grid[c][r] = screen X
-  const grid = [];
-  for (let c = 0; c <= COLS; c++) {
-    const strip = new Float32Array(ROWS + 1);
-    for (let r = 0; r <= ROWS; r++) {
-      const y = (r / ROWS) * H;
-      strip[r] = (c / COLS) * W + xDisplace(c, y, H, t);
-    }
-    grid.push(strip);
-  }
-
-  // ── Render each quad ──────────────────────────────
   for (let c = 0; c < COLS; c++) {
     for (let r = 0; r < ROWS; r++) {
       const y0 = (r       / ROWS) * H;
@@ -95,37 +119,20 @@ function draw(ms) {
       const x01 = grid[c    ][r + 1];
       const x11 = grid[c + 1][r + 1];
 
-      // Horizontal slope → fold angle → how much it faces the viewer
-      // Average top and bottom edges of this quad
-      const slopeTop = (x10 - x00) / colW;
-      const slopeBot = (x11 - x01) / colW;
-      const slope    = (slopeTop + slopeBot) * 0.5;
+      // Surface normal from horizontal slope
+      const slope = ((x10 - x00) + (x11 - x01)) * 0.5 / colW;
 
-      // Raw facing value: 1 = fully facing viewer, 0 = edge-on
-      const rawFacing = Math.max(0, Math.min(1, 0.5 - slope * 0.5));
+      // Map slope → facing [0,1]
+      // slope ~1 at rest; deviates with fold angle
+      // Use tanh to get a smooth S-curve that emphasises edges
+      const raw    = Math.max(0, Math.min(1, 0.5 - slope * 0.48));
+      const facing = 0.5 * (1 + Math.tanh((raw - 0.5) * 4.5));
 
-      // ── Two-stage shading ────────────────────────
-      // The BODY of the crease is soft (gentle mid-tone roll-off)
-      // The EDGE where slope is steep gets a sharp shadow
-      const softMid   = contrast(rawFacing, 1.6);  // gentle curve
-      const hardEdge  = contrast(rawFacing, 3.8);  // aggressive at extremes
+      const [r_ch, g_ch, b_ch] = shadeColor(facing);
 
-      // Blend: mostly soft, but the hard curve drives the deep shadows
-      const facing = softMid * 0.55 + hardEdge * 0.45;
-
-      // ── Colour mapping ───────────────────────────
-      // White fabric: highlight = 255, shadow = 185
-      // Warm shadows (very slightly yellow-grey, not blue)
-      const lo = 185, hi = 255;
-      const lum = lo + Math.round(facing * (hi - lo));
-
-      // Shadows are fractionally warmer (less blue) for linen feel
-      const r_ch = lum;
-      const g_ch = lum - 1;
-      const b_ch = lum - Math.round((1 - facing) * 9);
-
-      // Alpha: semi-translucent; overlapping folds compound naturally
-      ctx.globalAlpha = 0.68;
+      // Silk is more translucent than linen
+      // Folds that overlap read naturally more opaque
+      ctx.globalAlpha = 0.62;
       ctx.fillStyle   = `rgb(${r_ch},${g_ch},${b_ch})`;
 
       ctx.beginPath();
@@ -138,13 +145,13 @@ function draw(ms) {
     }
   }
 
-  // ── Very faint top hang shadow ────────────────────
+  // Barely-there top hang shadow
   ctx.globalAlpha = 1;
-  const topGrad = ctx.createLinearGradient(0, 0, 0, H * 0.04);
-  topGrad.addColorStop(0, 'rgba(180,175,168,0.28)');
-  topGrad.addColorStop(1, 'rgba(180,175,168,0)');
+  const topGrad = ctx.createLinearGradient(0, 0, 0, H * 0.035);
+  topGrad.addColorStop(0, 'rgba(140,143,152,0.22)');
+  topGrad.addColorStop(1, 'rgba(140,143,152,0)');
   ctx.fillStyle = topGrad;
-  ctx.fillRect(0, 0, W, H * 0.04);
+  ctx.fillRect(0, 0, W, H * 0.035);
 
   requestAnimationFrame(draw);
 }
