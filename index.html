@@ -160,7 +160,7 @@ function lightAt(nx) {
     const sigma = Math.sqrt(s2);
     const hd    = d - sigma * 0.68;
     const hs2   = s2 * 0.25;
-    light += (FOLDS[i].depth * 0.80) / (1 + (hd * hd) / hs2);
+    light += (FOLDS[i].depth * 1.00) / (1 + (hd * hd) / hs2);
   }
 
   return light;
@@ -214,10 +214,10 @@ function draw(ms) {
       // Peak:   bright white   rgb(255, 255, 255)
       // Sun wash adds strong peach glow
 
-      const r = Math.min(255, Math.round(165 + l * 90  + peach * 55));
-      const g = Math.min(255, Math.round(175 + l * 80  + peach * 30));
-      const b = Math.min(255, Math.round(198 + l * 57  - peach * 22));
-      const a = Math.round(Math.min(255, 115 + (1 - Math.min(1, l)) * 45));
+      const r = Math.min(255, Math.round(55 + l * 200  + peach * 55));
+      const g = Math.min(255, Math.round(65 + l * 190  + peach * 30));
+      const b = Math.min(255, Math.round(105 + l * 150 - peach * 22));
+      const a = 255;
 
       const idx   = (y * SW + x) * 4;
       data[idx]   = r;
