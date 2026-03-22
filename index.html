@@ -6,37 +6,52 @@
   <title>Curtain</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #f0f2f5; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #e4e8ee; }
 
-    /* Early morning sky behind the curtain */
+    /* Morning sky — rich blue top, strong peach bottom */
     .sky {
       position: fixed;
       inset: 0;
       background:
-        radial-gradient(ellipse 80% 50% at 55% 75%,
-          rgba(255, 178, 102, 0.35) 0%,
-          rgba(255, 178, 102, 0.08) 45%,
-          transparent 70%),
-        radial-gradient(ellipse 90% 60% at 45% 30%,
-          rgba(160, 195, 230, 0.40) 0%,
-          rgba(160, 195, 230, 0.10) 50%,
+        radial-gradient(ellipse 70% 45% at 60% 80%,
+          rgba(255, 165, 80, 0.60) 0%,
+          rgba(255, 165, 80, 0.15) 50%,
+          transparent 75%),
+        radial-gradient(ellipse 85% 55% at 40% 20%,
+          rgba(130, 175, 220, 0.65) 0%,
+          rgba(130, 175, 220, 0.15) 55%,
           transparent 80%),
-        linear-gradient(175deg,
-          #d4dfe8 0%,
-          #e5e2dc 35%,
-          #f2ece2 55%,
-          #f0dcc8 80%,
-          #e8cdb0 100%);
+        linear-gradient(172deg,
+          #b8cee0 0%,
+          #c8d4e0 20%,
+          #e0ddd5 42%,
+          #f0dfc8 60%,
+          #f2cca8 78%,
+          #e8b888 100%);
       pointer-events: none;
     }
 
     canvas { position: fixed; inset: 0; display: block; }
+
+    /* Caustics overlay — rendered on a second canvas */
+    .caustics {
+      position: fixed;
+      inset: 0;
+      mix-blend-mode: overlay;
+      opacity: 0.35;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 <div class="sky"></div>
 <canvas id="c"></canvas>
+<canvas id="caustics" class="caustics"></canvas>
+
 <script>
+// ═══════════════════════════════════════════════════════
+//  MAIN CURTAIN CANVAS
+// ═══════════════════════════════════════════════════════
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 
@@ -44,125 +59,129 @@ const small = document.createElement('canvas');
 const sctx  = small.getContext('2d');
 const SCALE = 4;
 
+// ═══════════════════════════════════════════════════════
+//  CAUSTICS CANVAS
+// ═══════════════════════════════════════════════════════
+const causticsCanvas = document.getElementById('caustics');
+const cctx           = causticsCanvas.getContext('2d');
+
+const cSmall = document.createElement('canvas');
+const csctx  = cSmall.getContext('2d');
+const C_SCALE = 6;  // caustics can be lower res — they're blurred anyway
+
 function resize() {
   canvas.width  = innerWidth;
   canvas.height = innerHeight;
   small.width   = Math.round(innerWidth  / SCALE);
   small.height  = Math.round(innerHeight / SCALE);
+
+  causticsCanvas.width  = innerWidth;
+  causticsCanvas.height = innerHeight;
+  cSmall.width  = Math.round(innerWidth  / C_SCALE);
+  cSmall.height = Math.round(innerHeight / C_SCALE);
 }
 window.addEventListener('resize', resize);
 resize();
 
-// ─── Generate 26 folds with varied character ──────────
-// Each fold has:
-//   relPos  – anchor X at the rod
-//   sigmaT  – crease width at top (tight, gathered)
-//   sigmaB  – crease width at bottom (loose, open)
-//   depth   – shadow intensity
-//   phase   – individual breeze timing
-//   weight  – how much this fold's motion propagates to neighbours
-
+// ─── Folds ────────────────────────────────────────────
 const NUM_FOLDS = 26;
 const FOLDS = [];
 for (let i = 0; i < NUM_FOLDS; i++) {
   const nx = (i + 0.5) / NUM_FOLDS;
-  // Alternate between deeper main folds and shallower secondary folds
   const isMain = i % 2 === 0;
   FOLDS.push({
     relPos: 0.02 + nx * 0.96,
     sigmaT: isMain ? 0.028 : 0.020,
     sigmaB: isMain ? 0.055 : 0.038,
     depth:  isMain ? 0.48  : 0.30,
-    phase:  (i * 1.37) % (Math.PI * 2),   // golden-ratio-ish stagger
+    phase:  (i * 1.37) % (Math.PI * 2),
     weight: isMain ? 1.0 : 0.6,
   });
 }
 
-// ─── Breeze system with neighbour propagation ─────────
-// Each fold has a base swing. Then each fold's displacement
-// is blended with its neighbours — so when one fold moves,
-// the fabric on either side gets dragged along.
-
-// Base swing for a single fold — pure time function, NO ny
+// ─── Breeze with neighbour propagation ────────────────
 function baseSwing(t, phase) {
   return (
-    Math.sin(t * 0.55 + phase)                * 0.060 +
-    Math.sin(t * 1.15 + phase * 1.8 + 1.4)   * 0.028 +
-    Math.sin(t * 0.22 + phase * 0.7 + 2.8)   * 0.042
+    Math.sin(t * 0.55 + phase)               * 0.060 +
+    Math.sin(t * 1.15 + phase * 1.8 + 1.4)  * 0.028 +
+    Math.sin(t * 0.22 + phase * 0.7 + 2.8)  * 0.042
   );
 }
 
-// Precompute base swings, then blur them across neighbours
 const swingRaw    = new Float32Array(NUM_FOLDS);
 const swingSmooth = new Float32Array(NUM_FOLDS);
 
 function computeSwings(t) {
-  // Step 1: raw individual swings
   for (let i = 0; i < NUM_FOLDS; i++) {
     swingRaw[i] = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight;
   }
-
-  // Step 2: propagate to neighbours — 3-pass gaussian-ish blur
-  // This simulates fabric tension: when fold 5 moves, folds 4 & 6 get pulled
   for (let pass = 0; pass < 3; pass++) {
     const src = pass === 0 ? swingRaw : swingSmooth;
     for (let i = 0; i < NUM_FOLDS; i++) {
-      const prev = i > 0              ? src[i - 1] : src[i];
-      const next = i < NUM_FOLDS - 1  ? src[i + 1] : src[i];
-      // 50% self + 25% each neighbour — strong coupling
+      const prev = i > 0             ? src[i-1] : src[i];
+      const next = i < NUM_FOLDS - 1 ? src[i+1] : src[i];
       swingSmooth[i] = src[i] * 0.50 + prev * 0.25 + next * 0.25;
     }
   }
 }
 
 // ─── Per-row precompute ───────────────────────────────
-const ROW_DATA = new Float32Array(NUM_FOLDS * 2); // [fx, s2, fx, s2, ...]
+const ROW_DATA = new Float32Array(NUM_FOLDS * 2);
 
 function precomputeRow(ny) {
-  // hang: exponential loosening — very stiff at top, very loose at bottom
-  // Using a steeper curve (0.5) so bottom half really swings
   const hang = Math.pow(ny, 0.50);
-
-  // Additional loosening: bottom 30% gets extra amplitude
   const extraLoose = ny > 0.7 ? (ny - 0.7) / 0.3 : 0;
   const totalHang  = hang + extraLoose * 0.4;
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     const f     = FOLDS[i];
     const fx    = f.relPos + swingSmooth[i] * totalHang;
-    // Sigma widens gently — soft at top, wider at bottom
-    const blend = Math.pow(ny, 0.7);  // opens early, already soft near rod
+    const blend = Math.pow(ny, 0.7);
     const sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
     ROW_DATA[i * 2]     = fx;
     ROW_DATA[i * 2 + 1] = sigma * sigma;
   }
 }
 
-// ─── Pixel light function ─────────────────────────────
 function lightAt(nx) {
   let light = 1.0;
-
   for (let i = 0; i < NUM_FOLDS; i++) {
     const fx  = ROW_DATA[i * 2];
     const s2  = ROW_DATA[i * 2 + 1];
     const d   = nx - fx;
     const d2  = d * d;
-
-    // Shadow — Lorentzian
     light -= FOLDS[i].depth / (1 + d2 / s2);
-
-    // Highlight — offset, narrower
     const sigma = Math.sqrt(s2);
     const hd    = d - sigma * 0.68;
     const hs2   = s2 * 0.25;
     light += (FOLDS[i].depth * 0.58) / (1 + (hd * hd) / hs2);
   }
-
   return light;
 }
 
-// ─── Draw loop ────────────────────────────────────────
+// ─── Caustic pattern ──────────────────────────────────
+// Overlapping sine waves at different angles = refracted light ripples
+function causticAt(nx, ny, t) {
+  // 4 wave layers at different angles and speeds
+  const w1 = Math.sin(nx * 28 + ny * 12 - t * 0.7) *
+             Math.cos(nx * 15 - ny * 20 + t * 0.5);
+  const w2 = Math.sin(nx * 22 - ny * 18 + t * 0.9 + 1.5) *
+             Math.cos(nx * 35 + ny * 8  - t * 0.4);
+  const w3 = Math.sin(nx * 40 + ny * 25 - t * 0.6 + 3.0) *
+             Math.cos(nx * 18 - ny * 30 + t * 0.8);
+  const w4 = Math.sin(nx * 12 + ny * 38 + t * 0.35 + 2.2) *
+             Math.cos(nx * 28 - ny * 15 - t * 0.55);
+
+  // Sum and concentrate the peaks (squaring pulls highlights)
+  const raw = (w1 + w2 + w3 + w4) * 0.25;
+  return raw * raw;
+}
+
+// ═══════════════════════════════════════════════════════
+//  DRAW LOOP
+// ═══════════════════════════════════════════════════════
 let imgCache = null;
+let caustCache = null;
 
 function draw(ms) {
   const t  = ms * 0.001;
@@ -174,43 +193,49 @@ function draw(ms) {
   }
   const data = imgCache.data;
 
-  // Compute this frame's breeze swings (with neighbour propagation)
   computeSwings(t);
+
+  // ── Moving sun position ─────────────────────────────
+  // Slow arc: starts lower-right, moves to upper-right over ~2 min cycle
+  const sunX = 0.58 + Math.sin(t * 0.04) * 0.15;
+  const sunY = 0.55 + Math.cos(t * 0.04) * 0.20;
 
   for (let y = 0; y < SH; y++) {
     const ny = y / SH;
     precomputeRow(ny);
 
-    const vertLight = 1.0 - ny * 0.06;
+    const vertLight = 1.0 - ny * 0.05;
 
     for (let x = 0; x < SW; x++) {
       const nx  = x / SW;
       const lum = lightAt(nx) * vertLight;
-      const l   = Math.max(0, Math.min(1.18, lum));
+      const l   = Math.max(0, Math.min(1.20, lum));
 
-      // ── Early morning colour model ──────────────
-      // Shadows: cool blue-grey (morning sky cast)
-      // Midtones: clean white fabric
-      // Highlights: warm peach/orange where sunlight bleeds through
-      //
-      // Shadow base: rgb(155, 165, 182) — soft blue-grey
-      // Peak:        rgb(255, 252, 245) — warm white
-      // We add a warm boost in highlights (l > 0.85) and cool push in shadows (l < 0.5)
+      // ── Morning colour model ──────────────────
+      // Shadows: sky blue    rgb(125, 155, 200)
+      // Peak:    warm white  rgb(255, 250, 240)
+      // Highlights push strong peach where sun bleeds through
 
-      const shadow = Math.max(0, 1 - l * 2);      // 1 at l=0, 0 at l≥0.5
-      const warmth = Math.max(0, (l - 0.85) / 0.33); // 0 at l≤0.85, 1 at l=1.18
+      const shadow = Math.max(0, 1 - l * 2);
+      const warmth = Math.max(0, (l - 0.80) / 0.40);
 
-      // Window light: warm radial glow from lower-right (early morning sun angle)
-      const cx = nx - 0.58;
-      const cy = ny - 0.55;
-      const sunGlow = Math.exp(-(cx*cx*2.5 + cy*cy*3.5)) * 0.22;
+      // Moving sun glow — peach radial
+      const cx = nx - sunX;
+      const cy = ny - sunY;
+      const sunGlow = Math.exp(-(cx*cx*2.0 + cy*cy*2.8)) * 0.35;
 
-      const totalWarmth = warmth + sunGlow * 2.0;
+      // Secondary wider sky glow — blue, from top-left
+      const bx = nx - 0.30;
+      const by = ny - 0.20;
+      const skyGlow = Math.exp(-(bx*bx*1.5 + by*by*2.0)) * 0.20;
 
-      const r = Math.min(255, Math.round(155 + l * 100 + totalWarmth * 28));
-      const g = Math.min(255, Math.round(165 + l * 87  + totalWarmth * 12));
-      const b = Math.min(255, Math.round(182 + l * 63  - totalWarmth * 8 + shadow * 10));
-      const a = Math.round(Math.min(255, 160 + (1 - Math.min(1, l)) * 55));
+      const peach = warmth + sunGlow * 2.5;
+      const blue  = shadow * 0.8 + skyGlow * 1.5;
+
+      const r = Math.min(255, Math.round(125 + l * 130 + peach * 42 - blue * 5));
+      const g = Math.min(255, Math.round(155 + l * 95  + peach * 22 - blue * 2));
+      const b = Math.min(255, Math.round(200 + l * 40  - peach * 12 + blue * 18));
+      const a = Math.round(Math.min(255, 155 + (1 - Math.min(1, l)) * 60));
 
       const idx   = (y * SW + x) * 4;
       data[idx]   = r;
@@ -222,7 +247,6 @@ function draw(ms) {
 
   sctx.putImageData(imgCache, 0, 0);
 
-  // Upscale with bilinear smoothing → natural blur
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -230,20 +254,61 @@ function draw(ms) {
 
   const W = canvas.width, H = canvas.height;
 
-  // Rod shadow — cool morning tone
+  // Rod shadow — cool blue
   const rod = ctx.createLinearGradient(0, 0, 0, H * 0.06);
-  rod.addColorStop(0,   'rgba(140,150,168,0.28)');
-  rod.addColorStop(0.5, 'rgba(140,150,168,0.06)');
-  rod.addColorStop(1,   'rgba(140,150,168,0)');
+  rod.addColorStop(0,   'rgba(110,130,165,0.30)');
+  rod.addColorStop(0.5, 'rgba(110,130,165,0.06)');
+  rod.addColorStop(1,   'rgba(110,130,165,0)');
   ctx.fillStyle = rod;
   ctx.fillRect(0, 0, W, H * 0.06);
 
-  // Hem — warm reflected morning light from floor
+  // Hem — warm peach reflected from floor
   const hem = ctx.createLinearGradient(0, H * 0.88, 0, H);
-  hem.addColorStop(0, 'rgba(200,170,140,0)');
-  hem.addColorStop(1, 'rgba(200,170,140,0.12)');
+  hem.addColorStop(0, 'rgba(220,165,110,0)');
+  hem.addColorStop(1, 'rgba(220,165,110,0.16)');
   ctx.fillStyle = hem;
   ctx.fillRect(0, H * 0.88, W, H * 0.12);
+
+  // ── Caustics ─────────────────────────────────────────
+  const CSW = cSmall.width;
+  const CSH = cSmall.height;
+
+  if (!caustCache || caustCache.width !== CSW || caustCache.height !== CSH) {
+    caustCache = csctx.createImageData(CSW, CSH);
+  }
+  const cd = caustCache.data;
+
+  for (let y = 0; y < CSH; y++) {
+    const ny = y / CSH;
+    for (let x = 0; x < CSW; x++) {
+      const nx = x / CSW;
+      const c  = causticAt(nx, ny, t);
+
+      // Caustics are brightest in the sun glow area, fade elsewhere
+      const cx = nx - sunX;
+      const cy = ny - sunY;
+      const sunMask = Math.exp(-(cx*cx*1.2 + cy*cy*1.8)) * 1.5;
+      const intensity = c * sunMask;
+
+      // Warm caustic light: peach-white
+      const rv = Math.min(255, Math.round(intensity * 380));
+      const gv = Math.min(255, Math.round(intensity * 300));
+      const bv = Math.min(255, Math.round(intensity * 180));
+
+      const ci = (y * CSW + x) * 4;
+      cd[ci]   = rv;
+      cd[ci+1] = gv;
+      cd[ci+2] = bv;
+      cd[ci+3] = Math.min(255, Math.round(intensity * 320));
+    }
+  }
+
+  csctx.putImageData(caustCache, 0, 0);
+
+  cctx.clearRect(0, 0, W, H);
+  cctx.imageSmoothingEnabled = true;
+  cctx.imageSmoothingQuality = 'high';
+  cctx.drawImage(cSmall, 0, 0, W, H);
 
   requestAnimationFrame(draw);
 }
