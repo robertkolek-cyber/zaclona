@@ -3,439 +3,163 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Curtain — Light Breeze</title>
+  <title>Curtain</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      background: #0d0a06;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* ─── Scene ──────────────────────────────────────── */
-    .scene {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-    }
-
-    /* ─── Background sky / wall ──────────────────────── */
-    .wall {
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse 80% 60% at 50% 0%,
-        #ffe8b0 0%,
-        #f5c97a 20%,
-        #c97c2e 50%,
-        #5a3010 80%,
-        #1a0d04 100%
-      );
-      animation: wallShift 9s ease-in-out infinite alternate;
-    }
-
-    @keyframes wallShift {
-      from { filter: brightness(1)   saturate(1);   }
-      to   { filter: brightness(1.12) saturate(1.2); }
-    }
-
-    /* ─── Window frame ───────────────────────────────── */
-    .window-frame {
-      position: absolute;
-      left: 50%;
-      top: 5%;
-      transform: translateX(-50%);
-      width: min(540px, 78vw);
-      height: 85vh;
-      border: 10px solid #2a1a0a;
-      border-radius: 6px 6px 0 0;
-      box-shadow:
-        inset 0 0 60px rgba(0,0,0,.5),
-        0 0 80px rgba(0,0,0,.8);
-      overflow: hidden;
-      background: transparent;
-    }
-
-    /* ─── Light shaft coming through ────────────────── */
-    .light-shaft {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-
-    /* ─── Curtain container ──────────────────────────── */
-    .curtain-wrap {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      pointer-events: none;
-    }
-
-    /* ─── Single curtain panel ───────────────────────── */
-    .panel {
-      position: absolute;
-      top: 0;
-      width: 56%;
-      height: 100%;
-      transform-origin: top center;
-    }
-    .panel--left  { left: -6%; }
-    .panel--right { right: -6%; transform-origin: top center; }
-
-    .panel svg {
+    html, body {
       width: 100%;
       height: 100%;
-      overflow: visible;
+      overflow: hidden;
     }
 
-    /* ─── Dust motes ─────────────────────────────────── */
-    .dust {
-      position: absolute;
+    body {
+      /* warm soft daylight behind the fabric */
+      background:
+        radial-gradient(ellipse 70% 80% at 38% 30%, #f7ede0 0%, transparent 65%),
+        radial-gradient(ellipse 50% 60% at 72% 20%, #f0e8d5 0%, transparent 60%),
+        linear-gradient(170deg, #e8dfd4 0%, #d5cfc8 40%, #c8c4bf 100%);
+    }
+
+    .curtain-svg {
+      position: fixed;
       inset: 0;
-      pointer-events: none;
+      width: 100%;
+      height: 100%;
     }
-    .mote {
-      position: absolute;
-      border-radius: 50%;
-      background: rgba(255, 230, 150, 0.85);
-      animation: float linear infinite;
-      filter: blur(0.5px);
-    }
-
-    @keyframes float {
-      0%   { transform: translate(0, 0) scale(1);   opacity: 0;   }
-      10%  {                                          opacity: 1;   }
-      85%  {                                          opacity: 0.6; }
-      100% { transform: translate(var(--dx), var(--dy)) scale(0.4); opacity: 0; }
-    }
-
-    /* ─── Pelmet / rod ───────────────────────────────── */
-    .rod {
-      position: absolute;
-      top: -8px;
-      left: -10px;
-      right: -10px;
-      height: 18px;
-      background: linear-gradient(to bottom, #4a2e10, #2a1505);
-      border-radius: 3px;
-      box-shadow: 0 4px 12px rgba(0,0,0,.6);
-      z-index: 10;
-    }
-
-    /* ─── Vignette over everything ───────────────────── */
-    .vignette {
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(ellipse 100% 100% at 50% 50%,
-        transparent 40%,
-        rgba(0,0,0,.55) 100%
-      );
-      pointer-events: none;
-      z-index: 20;
-    }
-
   </style>
 </head>
 <body>
 
-<div class="scene">
-  <div class="wall"></div>
+<svg class="curtain-svg"
+     viewBox="0 0 1000 1000"
+     preserveAspectRatio="xMidYMid slice"
+     xmlns="http://www.w3.org/2000/svg">
+  <defs>
 
-  <div class="window-frame" id="frame">
-    <!-- Light shafts via SVG filter -->
-    <svg class="light-shaft" viewBox="0 0 540 900" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <filter id="shaftBlur">
-          <feTurbulence type="fractalNoise" baseFrequency="0.025 0.008"
-                        numOctaves="4" seed="2" result="noise">
-            <animate attributeName="seed" values="2;14;5;20;2"
-                     dur="11s" repeatCount="indefinite"/>
-          </feTurbulence>
-          <feDisplacementMap in="SourceGraphic" in2="noise"
-                             scale="18" xChannelSelector="R" yChannelSelector="G"/>
-          <feGaussianBlur stdDeviation="6 2"/>
-        </filter>
-        <radialGradient id="gShaft1" cx="50%" cy="0%" r="90%" gradientUnits="objectBoundingBox">
-          <stop offset="0%"   stop-color="#fff7e0" stop-opacity="0.55"/>
-          <stop offset="60%"  stop-color="#f5c060" stop-opacity="0.15"/>
-          <stop offset="100%" stop-color="#f5c060" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="gShaft2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stop-color="#ffe5a0" stop-opacity="0.4"/>
-          <stop offset="100%" stop-color="#ffe5a0" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
+    <!-- ── Breeze displacement ──────────────────────────────── -->
+    <filter id="breeze" x="-5%" y="-2%" width="110%" height="104%"
+            color-interpolation-filters="sRGB">
 
-      <!-- Main shaft -->
-      <ellipse cx="270" cy="0" rx="200" ry="700" fill="url(#gShaft1)" filter="url(#shaftBlur)">
-        <animate attributeName="rx" values="200;230;180;215;200"
-                 dur="9s" repeatCount="indefinite" calcMode="spline"
-                 keySplines="0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1"/>
-        <animate attributeName="cx" values="270;260;285;255;270"
-                 dur="13s" repeatCount="indefinite" calcMode="spline"
-                 keySplines="0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1"/>
-      </ellipse>
+      <!-- Slow organic turbulence — the "air" -->
+      <feTurbulence
+        type="turbulence"
+        baseFrequency="0.0035 0.006"
+        numOctaves="5"
+        seed="4"
+        result="wind">
+        <!-- seed morphs so no loop is detectable -->
+        <animate attributeName="seed"
+                 values="4;11;7;18;3;14;4"
+                 dur="22s" repeatCount="indefinite"/>
+        <!-- frequency breathes slightly -->
+        <animate attributeName="baseFrequency"
+                 values="0.0035 0.006;0.004 0.0055;0.003 0.007;0.0035 0.006"
+                 dur="14s" repeatCount="indefinite"
+                 calcMode="spline"
+                 keySplines="0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1"/>
+      </feTurbulence>
 
-      <!-- Secondary shaft / glare -->
-      <rect x="0" y="0" width="540" height="900" fill="url(#gShaft2)">
-        <animate attributeName="opacity" values="1;0.6;1;0.8;1"
-                 dur="7s" repeatCount="indefinite"/>
-      </rect>
-    </svg>
+      <!-- Displacement — horizontal stronger than vertical for cloth feel -->
+      <feDisplacementMap
+        in="SourceGraphic" in2="wind"
+        xChannelSelector="R" yChannelSelector="G"
+        result="displaced">
+        <animate attributeName="scale"
+                 values="28;42;22;36;28"
+                 dur="14s" repeatCount="indefinite"
+                 calcMode="spline"
+                 keySplines="0.5 0 0.5 1;0.5 0 0.5 1;0.5 0 0.5 1;0.5 0 0.5 1"/>
+      </feDisplacementMap>
 
-    <!-- Left curtain panel -->
-    <div class="panel panel--left">
-      <svg id="svgLeft" viewBox="0 0 300 900" preserveAspectRatio="none"
-           xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <!-- Fabric texture turbulence -->
-          <filter id="fabricL" x="-5%" y="-2%" width="110%" height="104%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.04 0.02"
-                          numOctaves="5" seed="7" result="fab">
-              <animate attributeName="baseFrequency"
-                       values="0.04 0.02;0.042 0.018;0.038 0.022;0.04 0.02"
-                       dur="8s" repeatCount="indefinite"/>
-            </feTurbulence>
-            <feDisplacementMap in="SourceGraphic" in2="fab"
-                               scale="9" xChannelSelector="R" yChannelSelector="G"/>
-          </filter>
+      <!-- Very soft blur to kill aliasing on displaced edges -->
+      <feGaussianBlur in="displaced" stdDeviation="0.4"/>
+    </filter>
 
-          <!-- Cloth wave displacement (breeze) -->
-          <filter id="breezeL" x="-15%" y="-2%" width="130%" height="104%"
-                  color-interpolation-filters="linearRGB">
-            <feTurbulence type="turbulence" baseFrequency="0.006 0.018"
-                          numOctaves="6" seed="3" result="turb">
-              <animateTransform attributeName="numOctaves" type="translate" from="0" to="0" dur="0s"/>
-              <animate attributeName="seed" values="3;11;19;7;3"
-                       dur="14s" repeatCount="indefinite"/>
-              <animate attributeName="baseFrequency"
-                       values="0.006 0.018;0.007 0.016;0.005 0.021;0.006 0.018"
-                       dur="10s" repeatCount="indefinite" calcMode="spline"
-                       keySplines="0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1"/>
-            </feTurbulence>
-            <feDisplacementMap in="SourceGraphic" in2="turb"
-                               scale="34" xChannelSelector="R" yChannelSelector="G"
-                               result="displaced">
-              <animate attributeName="scale" values="34;46;28;40;34"
-                       dur="10s" repeatCount="indefinite" calcMode="spline"
-                       keySplines="0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1"/>
-            </feDisplacementMap>
-          </filter>
+    <!-- ── Fine fabric grain (stays still — it's the weave) ─── -->
+    <filter id="weave" x="0%" y="0%" width="100%" height="100%"
+            color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise"
+                    baseFrequency="0.65 0.4"
+                    numOctaves="4"
+                    seed="2"
+                    result="grain"/>
+      <feColorMatrix type="saturate" values="0" in="grain" result="gray"/>
+      <feComponentTransfer in="gray" result="light">
+        <feFuncA type="linear" slope="0.06"/>
+      </feComponentTransfer>
+      <feComposite in="light" in2="SourceGraphic" operator="over"/>
+    </filter>
 
-          <!-- Sheen / light catching folds -->
-          <linearGradient id="sheenL" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stop-color="#f0e8d8" stop-opacity="1"/>
-            <stop offset="22%"  stop-color="#e8dcc8" stop-opacity="1"/>
-            <stop offset="38%"  stop-color="#fff8f0" stop-opacity="1"/>
-            <stop offset="55%"  stop-color="#d4c8b0" stop-opacity="1"/>
-            <stop offset="70%"  stop-color="#ede0cc" stop-opacity="1"/>
-            <stop offset="85%"  stop-color="#f5ede0" stop-opacity="1"/>
-            <stop offset="100%" stop-color="#c8b898" stop-opacity="1"/>
-          </linearGradient>
+    <!-- ── Vertical fold shading (linear stripes) ──────────── -->
+    <linearGradient id="folds" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"    stop-color="#f5f3f0" stop-opacity="1"/>
+      <stop offset="6%"    stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="12%"   stop-color="#eae8e4" stop-opacity="1"/>
+      <stop offset="18%"   stop-color="#f8f7f5" stop-opacity="1"/>
+      <stop offset="25%"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="31%"   stop-color="#ede9e5" stop-opacity="1"/>
+      <stop offset="38%"   stop-color="#fafaf8" stop-opacity="1"/>
+      <stop offset="44%"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="50%"   stop-color="#f0eee9" stop-opacity="1"/>
+      <stop offset="56%"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="62%"   stop-color="#eceae6" stop-opacity="1"/>
+      <stop offset="69%"   stop-color="#fafaf8" stop-opacity="1"/>
+      <stop offset="75%"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="81%"   stop-color="#ede9e5" stop-opacity="1"/>
+      <stop offset="88%"   stop-color="#f8f6f3" stop-opacity="1"/>
+      <stop offset="94%"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="100%"  stop-color="#f0eeea" stop-opacity="1"/>
+    </linearGradient>
 
-          <!-- Edge fade so curtain blends with wall -->
-          <linearGradient id="edgeFadeL" x1="1" y1="0" x2="0" y2="0">
-            <stop offset="0%"   stop-color="white" stop-opacity="0"/>
-            <stop offset="18%"  stop-color="white" stop-opacity="1"/>
-            <stop offset="100%" stop-color="white" stop-opacity="1"/>
-          </linearGradient>
+    <!-- ── Soft top-to-bottom shadow (hang weight) ─────────── -->
+    <linearGradient id="hangShadow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#d8d4ce" stop-opacity="0.25"/>
+      <stop offset="8%"   stop-color="transparent" stop-opacity="0"/>
+      <stop offset="85%"  stop-color="transparent" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#c8c4be" stop-opacity="0.2"/>
+    </linearGradient>
 
-          <mask id="maskL">
-            <rect width="300" height="900" fill="url(#edgeFadeL)"/>
-          </mask>
-        </defs>
+    <!-- ── Light bloom from behind ─────────────────────────── -->
+    <radialGradient id="bloom" cx="45%" cy="25%" r="55%">
+      <stop offset="0%"   stop-color="#fff8f0" stop-opacity="0.45"/>
+      <stop offset="50%"  stop-color="#fff8f0" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#fff8f0" stop-opacity="0"/>
+    </radialGradient>
 
-        <!-- Main cloth shape with folds baked in -->
-        <g mask="url(#maskL)" filter="url(#breezeL)">
-          <g filter="url(#fabricL)">
-            <path id="clothL"
-              d="
-                M 0,0
-                C 30,0 60,0 90,0
-                C 120,0 150,0 180,0
-                C 210,0 240,0 270,0
-                L 300,0
-                L 300,900
-                C 270,900 240,900 210,900
-                C 180,900 150,900 120,900
-                C  90,900  60,900  30,900
-                L   0,900
-                Z
-              "
-              fill="url(#sheenL)"
-            />
+  </defs>
 
-            <!-- Vertical fold lines giving cloth dimension -->
-            <line x1="40"  y1="0" x2="28"  y2="900" stroke="#c0b090" stroke-width="2" stroke-opacity="0.35"/>
-            <line x1="80"  y1="0" x2="72"  y2="900" stroke="#fff8f0" stroke-width="2.5" stroke-opacity="0.5"/>
-            <line x1="120" y1="0" x2="115" y2="900" stroke="#b8a880" stroke-width="1.5" stroke-opacity="0.3"/>
-            <line x1="160" y1="0" x2="158" y2="900" stroke="#fff8f0" stroke-width="2" stroke-opacity="0.45"/>
-            <line x1="200" y1="0" x2="203" y2="900" stroke="#c0b090" stroke-width="1.5" stroke-opacity="0.3"/>
-            <line x1="240" y1="0" x2="244" y2="900" stroke="#fff8f0" stroke-width="2" stroke-opacity="0.4"/>
+  <!-- ══ CURTAIN ════════════════════════════════════════════ -->
+  <!-- All three layers share the same breeze displacement     -->
+  <g filter="url(#breeze)">
 
-            <!-- Translucency gradient — light bleeds through -->
-            <rect width="300" height="900"
-                  fill="rgba(255,235,180,0.08)"
-                  style="mix-blend-mode:screen"/>
-          </g>
-        </g>
+    <!-- Layer 1: base fabric — semi-transparent white -->
+    <rect width="1000" height="1000"
+          fill="#fdfcfa"
+          fill-opacity="0.82"/>
 
-        <!-- Bottom hem weight -->
-        <rect y="880" width="300" height="20" fill="#b8a870" opacity="0.25" filter="url(#breezeL)"/>
-      </svg>
-    </div>
+    <!-- Layer 2: fold shading -->
+    <rect width="1000" height="1000"
+          fill="url(#folds)"
+          fill-opacity="0.55"/>
 
-    <!-- Right curtain panel -->
-    <div class="panel panel--right">
-      <svg id="svgRight" viewBox="0 0 300 900" preserveAspectRatio="none"
-           xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <filter id="fabricR" x="-5%" y="-2%" width="110%" height="104%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.04 0.02"
-                          numOctaves="5" seed="13" result="fab">
-              <animate attributeName="baseFrequency"
-                       values="0.04 0.02;0.039 0.023;0.043 0.019;0.04 0.02"
-                       dur="9s" repeatCount="indefinite"/>
-            </feTurbulence>
-            <feDisplacementMap in="SourceGraphic" in2="fab"
-                               scale="9" xChannelSelector="R" yChannelSelector="G"/>
-          </filter>
+    <!-- Layer 3: hang shadow top/bottom -->
+    <rect width="1000" height="1000"
+          fill="url(#hangShadow)"/>
 
-          <filter id="breezeR" x="-15%" y="-2%" width="130%" height="104%"
-                  color-interpolation-filters="linearRGB">
-            <feTurbulence type="turbulence" baseFrequency="0.006 0.018"
-                          numOctaves="6" seed="9" result="turb">
-              <animate attributeName="seed" values="9;17;5;13;9"
-                       dur="16s" repeatCount="indefinite"/>
-              <animate attributeName="baseFrequency"
-                       values="0.006 0.018;0.008 0.015;0.005 0.022;0.006 0.018"
-                       dur="12s" repeatCount="indefinite" calcMode="spline"
-                       keySplines="0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1"/>
-            </feTurbulence>
-            <feDisplacementMap in="SourceGraphic" in2="turb"
-                               scale="30" xChannelSelector="R" yChannelSelector="G">
-              <animate attributeName="scale" values="30;44;25;38;30"
-                       dur="12s" repeatCount="indefinite" calcMode="spline"
-                       keySplines="0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1;0.4 0 0.6 1"/>
-            </feDisplacementMap>
-          </filter>
+    <!-- Layer 4: woven fabric texture -->
+    <rect width="1000" height="1000"
+          fill="#f8f6f2"
+          fill-opacity="1"
+          filter="url(#weave)"/>
 
-          <!-- Mirror the sheen for right panel -->
-          <linearGradient id="sheenR" x1="1" y1="0" x2="0" y2="0">
-            <stop offset="0%"   stop-color="#f0e8d8" stop-opacity="1"/>
-            <stop offset="22%"  stop-color="#e8dcc8" stop-opacity="1"/>
-            <stop offset="38%"  stop-color="#fff8f0" stop-opacity="1"/>
-            <stop offset="55%"  stop-color="#d4c8b0" stop-opacity="1"/>
-            <stop offset="70%"  stop-color="#ede0cc" stop-opacity="1"/>
-            <stop offset="85%"  stop-color="#f5ede0" stop-opacity="1"/>
-            <stop offset="100%" stop-color="#c8b898" stop-opacity="1"/>
-          </linearGradient>
+    <!-- Layer 5: light bloom bleeding through -->
+    <rect width="1000" height="1000"
+          fill="url(#bloom)"/>
 
-          <linearGradient id="edgeFadeR" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stop-color="white" stop-opacity="0"/>
-            <stop offset="18%"  stop-color="white" stop-opacity="1"/>
-            <stop offset="100%" stop-color="white" stop-opacity="1"/>
-          </linearGradient>
+  </g>
 
-          <mask id="maskR">
-            <rect width="300" height="900" fill="url(#edgeFadeR)"/>
-          </mask>
-        </defs>
+</svg>
 
-        <g mask="url(#maskR)" filter="url(#breezeR)">
-          <g filter="url(#fabricR)">
-            <rect width="300" height="900" fill="url(#sheenR)"/>
-
-            <line x1="260" y1="0" x2="272" y2="900" stroke="#c0b090" stroke-width="2" stroke-opacity="0.35"/>
-            <line x1="220" y1="0" x2="228" y2="900" stroke="#fff8f0" stroke-width="2.5" stroke-opacity="0.5"/>
-            <line x1="180" y1="0" x2="185" y2="900" stroke="#b8a880" stroke-width="1.5" stroke-opacity="0.3"/>
-            <line x1="140" y1="0" x2="142" y2="900" stroke="#fff8f0" stroke-width="2" stroke-opacity="0.45"/>
-            <line x1="100" y1="0" x2="97"  y2="900" stroke="#c0b090" stroke-width="1.5" stroke-opacity="0.3"/>
-            <line x1="60"  y1="0" x2="56"  y2="900" stroke="#fff8f0" stroke-width="2" stroke-opacity="0.4"/>
-
-            <rect width="300" height="900"
-                  fill="rgba(255,235,180,0.08)"
-                  style="mix-blend-mode:screen"/>
-          </g>
-        </g>
-
-        <rect y="880" width="300" height="20" fill="#b8a870" opacity="0.25" filter="url(#breezeR)"/>
-      </svg>
-    </div>
-
-    <!-- Dust motes container -->
-    <div class="dust" id="dustContainer"></div>
-
-    <!-- Rod / pelmet -->
-    <div class="rod"></div>
-    <div class="vignette"></div>
-  </div>
-</div>
-
-<script>
-  // ─── Dust mote generator ──────────────────────────────
-  const dust = document.getElementById('dustContainer');
-  const W = dust.offsetWidth || 540;
-  const H = dust.offsetHeight || 900;
-
-  const moteCount = 38;
-
-  for (let i = 0; i < moteCount; i++) {
-    const el = document.createElement('div');
-    el.className = 'mote';
-
-    const size   = 1 + Math.random() * 3;
-    const startX = 80 + Math.random() * (W - 160);  // keep inside shaft
-    const startY = Math.random() * H;
-
-    // Gentle drift: mostly upward & sideways
-    const dx = (Math.random() - 0.5) * 80;
-    const dy = -(40 + Math.random() * 180);
-
-    const dur  = 6 + Math.random() * 14;
-    const delay = -(Math.random() * dur); // stagger start
-
-    el.style.cssText = `
-      width: ${size}px;
-      height: ${size}px;
-      left: ${startX}px;
-      top: ${startY}px;
-      --dx: ${dx}px;
-      --dy: ${dy}px;
-      animation-duration: ${dur}s;
-      animation-delay: ${delay}s;
-      opacity: 0;
-    `;
-    dust.appendChild(el);
-  }
-
-  // ─── Subtle curtain sway via CSS var injection ────────
-  // The SVG filters handle most motion, but we add a gentle
-  // translateX to the whole panels for a slow pendulum feel.
-  const left  = document.querySelector('.panel--left');
-  const right = document.querySelector('.panel--right');
-
-  let t = 0;
-  const swayAmp   = 6;   // px
-  const swaySpeed = 0.0004;
-
-  function sway(ts) {
-    t = ts * swaySpeed;
-
-    // Low-frequency compound sway — two sine waves beat against each other
-    const lx = Math.sin(t) * swayAmp + Math.sin(t * 0.37) * (swayAmp * 0.4);
-    const rx = Math.sin(t * 0.91 + 1.1) * swayAmp + Math.sin(t * 0.43) * (swayAmp * 0.4);
-
-    left.style.transform  = `translateX(${lx}px)`;
-    right.style.transform = `translateX(${-rx}px)`;
-
-    requestAnimationFrame(sway);
-  }
-  requestAnimationFrame(sway);
-</script>
 </body>
 </html>
