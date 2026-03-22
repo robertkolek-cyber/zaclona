@@ -6,41 +6,12 @@
   <title>Curtain</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { width: 100%; height: 100%; background: #f2f0ed; }
-    body { width: 100%; min-height: 300vh; margin: 0; padding: 0; background: #f2f0ed; }
-
-    /* Morning sky — navy top melting into peachy sunrise at bottom */
-    .sky {
-      position: fixed;
-      inset: 0;
-      background:
-        radial-gradient(ellipse 60% 45% at 62% 68%,
-          rgba(255, 185, 120, 0.55) 0%,
-          rgba(255, 170, 100, 0.18) 50%,
-          transparent 80%),
-        radial-gradient(ellipse 50% 35% at 55% 78%,
-          rgba(255, 145, 80, 0.30) 0%,
-          transparent 60%),
-        radial-gradient(ellipse 80% 50% at 40% 18%,
-          rgba(180, 200, 225, 0.30) 0%,
-          rgba(180, 200, 225, 0.08) 55%,
-          transparent 80%),
-        linear-gradient(178deg,
-          #d8e0ea 0%,
-          #e2e5ea 18%,
-          #ece8e2 35%,
-          #f2e8d8 52%,
-          #f8dcc0 68%,
-          #fad2a8 82%,
-          #f5c898 100%);
-      pointer-events: none;
-    }
-
-    canvas { position: fixed; inset: 0; display: block; }
+    html { width: 100%; background: #fff; }
+    body { width: 100%; min-height: 400vh; margin: 0; padding: 0; background: #fff; }
+    canvas { position: fixed; inset: 0; display: block; pointer-events: none; }
   </style>
 </head>
 <body>
-<div class="sky"></div>
 <canvas id="c"></canvas>
 <script>
 const canvas = document.getElementById('c');
@@ -59,48 +30,36 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ─── Scroll-driven curtain slide ─────────────────────
-// As user scrolls down, the curtain slides to the left,
-// revealing the sky/content behind it.
-let scrollOffset = 0;  // 0 = fully visible, 1 = fully off-screen left
+// ─── Scroll state with inertia ───────────────────────
+// scrollPull = target from scroll position (0..1)
+// curtainPull = smoothed value that chases scrollPull with spring physics
+let scrollPull  = 0;
+let curtainPull = 0;
+let curtainVel  = 0;
 
 function updateScroll() {
   const maxScroll = document.documentElement.scrollHeight - innerHeight;
-  scrollOffset = maxScroll > 0 ? window.scrollY / maxScroll : 0;
+  scrollPull = maxScroll > 0 ? Math.min(1, window.scrollY / maxScroll) : 0;
 }
 window.addEventListener('scroll', updateScroll, { passive: true });
 
-// ─── Generate 26 folds with varied character ──────────
-// Each fold has:
-//   relPos  – anchor X at the rod
-//   sigmaT  – crease width at top (tight, gathered)
-//   sigmaB  – crease width at bottom (loose, open)
-//   depth   – shadow intensity
-//   phase   – individual breeze timing
-//   weight  – how much this fold's motion propagates to neighbours
-
+// ─── Generate folds ──────────────────────────────────
 const NUM_FOLDS = 26;
 const FOLDS = [];
 for (let i = 0; i < NUM_FOLDS; i++) {
   const nx = (i + 0.5) / NUM_FOLDS;
-  // Alternate between deeper main folds and shallower secondary folds
   const isMain = i % 2 === 0;
   FOLDS.push({
     relPos: 0.02 + nx * 0.96,
     sigmaT: isMain ? 0.028 : 0.020,
     sigmaB: isMain ? 0.055 : 0.038,
     depth:  isMain ? 0.30  : 0.18,
-    phase:  (i * 1.37) % (Math.PI * 2),   // golden-ratio-ish stagger
+    phase:  (i * 1.37) % (Math.PI * 2),
     weight: isMain ? 1.0 : 0.6,
   });
 }
 
-// ─── Breeze system with neighbour propagation ─────────
-// Each fold has a base swing. Then each fold's displacement
-// is blended with its neighbours — so when one fold moves,
-// the fabric on either side gets dragged along.
-
-// Base swing for a single fold — pure time function, NO ny
+// ─── Breeze ──────────────────────────────────────────
 function baseSwing(t, phase) {
   return (
     Math.sin(t * 0.55 + phase)                * 0.060 +
@@ -109,80 +68,125 @@ function baseSwing(t, phase) {
   );
 }
 
-// Precompute base swings, then blur them across neighbours
 const swingRaw    = new Float32Array(NUM_FOLDS);
 const swingSmooth = new Float32Array(NUM_FOLDS);
 
 function computeSwings(t) {
-  // Step 1: raw individual swings
   for (let i = 0; i < NUM_FOLDS; i++) {
     swingRaw[i] = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight;
   }
-
-  // Step 2: propagate to neighbours — 3-pass gaussian-ish blur
-  // This simulates fabric tension: when fold 5 moves, folds 4 & 6 get pulled
   for (let pass = 0; pass < 3; pass++) {
     const src = pass === 0 ? swingRaw : swingSmooth;
     for (let i = 0; i < NUM_FOLDS; i++) {
       const prev = i > 0              ? src[i - 1] : src[i];
       const next = i < NUM_FOLDS - 1  ? src[i + 1] : src[i];
-      // 50% self + 25% each neighbour — strong coupling
       swingSmooth[i] = src[i] * 0.50 + prev * 0.25 + next * 0.25;
     }
   }
 }
 
-// ─── Per-row precompute ───────────────────────────────
-const ROW_DATA = new Float32Array(NUM_FOLDS * 2); // [fx, s2, fx, s2, ...]
+// ─── Per-row precompute (now with curtain pull) ──────
+const ROW_DATA = new Float32Array(NUM_FOLDS * 2);
+
+// Per-fold pull state — each fold has its own smoothed pull
+// Right folds move first (they're pulled off the rod first),
+// left folds follow with delay (fabric cascades)
+const foldPull     = new Float32Array(NUM_FOLDS);
+const foldPullVel  = new Float32Array(NUM_FOLDS);
+
+function updateFoldPull(dt) {
+  // Spring physics for the main curtainPull chasing scrollPull
+  const pullSpringK = 8.0;
+  const pullDamping = 4.5;
+  const pullAccel = pullSpringK * (scrollPull - curtainPull) - pullDamping * curtainVel;
+  curtainVel  += pullAccel * dt;
+  curtainPull += curtainVel * dt;
+  curtainPull  = Math.max(0, Math.min(1.05, curtainPull));
+
+  // Each fold chases curtainPull but with cascading delay:
+  // Right folds respond first, left folds lag behind.
+  // This creates the "peeling" effect like pulling a real curtain.
+  for (let i = 0; i < NUM_FOLDS; i++) {
+    // How quickly this fold responds — rightmost = fastest
+    const foldNX = FOLDS[i].relPos;
+    // Right folds (nx~1) respond immediately, left folds (nx~0) lag
+    // Exponential mapping so the cascade feels organic
+    const responsiveness = 0.3 + foldNX * foldNX * 12.0;
+
+    // Each fold's target: once curtainPull passes this fold's position,
+    // it starts gathering. Rightmost folds start gathering first.
+    const foldThreshold = (1.0 - foldNX) * 0.7;
+    const foldTarget = Math.max(0, (curtainPull - foldThreshold) / (1.0 - foldThreshold));
+    const clampedTarget = Math.min(1, foldTarget);
+
+    const accel = responsiveness * (clampedTarget - foldPull[i]) - 3.0 * foldPullVel[i];
+    foldPullVel[i] += accel * dt;
+    foldPull[i]    += foldPullVel[i] * dt;
+    foldPull[i]     = Math.max(0, Math.min(1.2, foldPull[i]));
+  }
+}
 
 function precomputeRow(ny) {
-  // hang: exponential loosening — very stiff at top, very loose at bottom
-  // Using a steeper curve (0.5) so bottom half really swings
   const hang = Math.pow(ny, 0.50);
-
-  // Additional loosening: bottom 30% gets extra amplitude
   const extraLoose = ny > 0.7 ? (ny - 0.7) / 0.3 : 0;
   const totalHang  = hang + extraLoose * 0.4;
 
+  // Bottom of curtain drags behind top when being pulled
+  // ny=0 (top) moves at full pull speed, ny=1 (bottom) lags
+  const dragLag = 1.0 - ny * ny * 0.35;
+
   for (let i = 0; i < NUM_FOLDS; i++) {
-    const f     = FOLDS[i];
-    const fx    = f.relPos + swingSmooth[i] * totalHang;
-    // Sigma widens gently — soft at top, wider at bottom
-    const blend = Math.pow(ny, 0.7);  // opens early, already soft near rod
-    const sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
+    const f = FOLDS[i];
+
+    // Base position with breeze
+    let fx = f.relPos + swingSmooth[i] * totalHang;
+
+    // Apply curtain pull: fold gathers toward left edge
+    // The pull compresses folds together and shifts them left
+    const pull = foldPull[i] * dragLag;
+
+    // Gathered position: all folds compress into a narrow band on the left
+    // As pull increases, fold moves from its natural position toward ~-0.15
+    // The gathering compresses folds closer together (fabric bunches up)
+    const gatheredX = -0.08 - (NUM_FOLDS - i) * 0.008;
+    fx = fx * (1 - pull) + gatheredX * pull;
+
+    // Folds get tighter (narrower sigma) as they bunch up
+    const blend = Math.pow(ny, 0.7);
+    let sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
+    sigma *= 1.0 - pull * 0.5;  // compress fold width when gathered
+
     ROW_DATA[i * 2]     = fx;
     ROW_DATA[i * 2 + 1] = sigma * sigma;
   }
 }
 
-// ─── Pixel light function ─────────────────────────────
+// ─── Pixel light ─────────────────────────────────────
 function lightAt(nx) {
   let light = 1.0;
-
   for (let i = 0; i < NUM_FOLDS; i++) {
     const fx  = ROW_DATA[i * 2];
     const s2  = ROW_DATA[i * 2 + 1];
     const d   = nx - fx;
     const d2  = d * d;
-
-    // Shadow — Lorentzian
     light -= FOLDS[i].depth / (1 + d2 / s2);
-
-    // Highlight — offset, narrower
     const sigma = Math.sqrt(s2);
     const hd    = d - sigma * 0.68;
     const hs2   = s2 * 0.25;
     light += (FOLDS[i].depth * 1.00) / (1 + (hd * hd) / hs2);
   }
-
   return light;
 }
 
-// ─── Draw loop ────────────────────────────────────────
-let imgCache = null;
+// ─── Draw loop ───────────────────────────────────────
+let imgCache  = null;
+let lastFrame = 0;
 
 function draw(ms) {
   const t  = ms * 0.001;
+  const dt = lastFrame ? Math.min(0.05, t - lastFrame) : 0.016;
+  lastFrame = t;
+
   const SW = small.width;
   const SH = small.height;
 
@@ -191,8 +195,8 @@ function draw(ms) {
   }
   const data = imgCache.data;
 
-  // Compute this frame's breeze swings (with neighbour propagation)
   computeSwings(t);
+  updateFoldPull(dt);
 
   for (let y = 0; y < SH; y++) {
     const ny = y / SH;
@@ -205,66 +209,57 @@ function draw(ms) {
       const lum = lightAt(nx) * vertLight;
       const l   = Math.max(0, Math.min(1.20, lum));
 
-      // ── Directional morning light ─────────────────
-      // Sun comes from lower-right, washing warm across the fabric.
-      // Not a spotlight — a wide diagonal gradient that slowly shifts
-      // as if clouds are drifting or the sun is climbing.
-
-      // Diagonal warm zone: higher = more warm light hitting this point
-      // Breathes slowly — the warm edge creeps up then recedes
       const breathe   = Math.sin(t * 0.06) * 0.12 + Math.sin(t * 0.025) * 0.08;
       const warmZone  = nx * 0.35 + (1.0 - ny) * 0.45 + breathe;
-      // Smoothstep into [0,1] — the transition from cool to warm
       const warmRaw   = Math.max(0, Math.min(1, (warmZone - 0.20) / 0.55));
-      const warmth    = warmRaw * warmRaw * (3 - 2 * warmRaw); // smoothstep
-
-      // Only apply peach where fabric is actually lit (l > 0.5)
-      const peach = warmth * Math.max(0, Math.min(1, (l - 0.3) / 0.5));
-
-      // ── Soft sheer fabric: light blue shadow → bright white/peach ──
-      // Shadow: soft blue-grey rgb(165, 175, 198)
-      // Peak:   bright white   rgb(255, 255, 255)
-      // Sun wash adds strong peach glow
+      const warmth    = warmRaw * warmRaw * (3 - 2 * warmRaw);
+      const peach     = warmth * Math.max(0, Math.min(1, (l - 0.3) / 0.5));
 
       const r = Math.min(255, Math.round(55 + l * 200  + peach * 55));
       const g = Math.min(255, Math.round(65 + l * 190  + peach * 30));
       const b = Math.min(255, Math.round(105 + l * 150 - peach * 22));
-      const a = 255;
+
+      // Alpha: curtain becomes transparent where folds have been pulled away
+      // If all nearby folds are off-screen left, alpha fades to 0
+      let coverage = 0;
+      for (let fi = 0; fi < NUM_FOLDS; fi++) {
+        const fx = ROW_DATA[fi * 2];
+        const s2 = ROW_DATA[fi * 2 + 1];
+        const dd = nx - fx;
+        coverage += 1.0 / (1 + (dd * dd) / (s2 * 8));
+      }
+      const alpha = Math.min(255, Math.round(Math.min(1, coverage * 0.45) * 255));
 
       const idx   = (y * SW + x) * 4;
       data[idx]   = r;
       data[idx+1] = g;
       data[idx+2] = b;
-      data[idx+3] = a;
+      data[idx+3] = alpha;
     }
   }
 
   sctx.putImageData(imgCache, 0, 0);
 
-  // Upscale with bilinear smoothing → natural blur
-  // Apply scroll offset: curtain slides left as user scrolls down
   const W = canvas.width, H = canvas.height;
-  const slideX = -scrollOffset * W * 1.05;  // slide fully off-screen + a bit extra
-
   ctx.clearRect(0, 0, W, H);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(small, slideX, 0, W, H);
+  ctx.drawImage(small, 0, 0, W, H);
 
-  // Rod shadow — navy
+  // Rod shadow
   const rod = ctx.createLinearGradient(0, 0, 0, H * 0.06);
   rod.addColorStop(0,   'rgba(140,148,170,0.22)');
   rod.addColorStop(0.5, 'rgba(140,148,170,0.05)');
   rod.addColorStop(1,   'rgba(140,148,170,0)');
   ctx.fillStyle = rod;
-  ctx.fillRect(slideX, 0, W, H * 0.06);
+  ctx.fillRect(0, 0, W, H * 0.06);
 
-  // Hem — warm peach reflected light from floor
+  // Hem glow
   const hem = ctx.createLinearGradient(0, H * 0.85, 0, H);
   hem.addColorStop(0, 'rgba(240,175,110,0)');
   hem.addColorStop(1, 'rgba(240,175,110,0.14)');
   ctx.fillStyle = hem;
-  ctx.fillRect(slideX, H * 0.85, W, H * 0.15);
+  ctx.fillRect(0, H * 0.85, W, H * 0.15);
 
   requestAnimationFrame(draw);
 }
