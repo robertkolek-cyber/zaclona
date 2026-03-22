@@ -6,87 +6,19 @@
   <title>Curtain</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #fefefe;
-    }
-
-    /* ── Ambient light layer behind the curtain ────────── */
-    .ambient {
-      position: fixed;
-      inset: 0;
-      background:
-        radial-gradient(ellipse 65% 55% at 52% 40%,
-          rgba(255, 248, 235, 0.70) 0%,
-          rgba(255, 248, 235, 0.25) 50%,
-          transparent 100%),
-        radial-gradient(ellipse 80% 70% at 45% 60%,
-          rgba(245, 238, 225, 0.40) 0%,
-          transparent 100%);
-      pointer-events: none;
-    }
-
-    canvas {
-      position: fixed;
-      inset: 0;
-      display: block;
-    }
-
-    /* ── Top rod: thin architectural rail ──────────────── */
-    .rail {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      background: linear-gradient(to bottom,
-        rgba(180, 175, 165, 0.35),
-        rgba(180, 175, 165, 0.05));
-      pointer-events: none;
-      z-index: 2;
-    }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #fff; }
+    canvas { position: fixed; inset: 0; display: block; }
   </style>
 </head>
 <body>
-
-<div class="ambient"></div>
 <canvas id="c"></canvas>
-<div class="rail"></div>
-
 <script>
-// ═══════════════════════════════════════════════════════
-//  SHEER CURTAIN — pixel-shader renderer
-//
-//  Fabric effect:
-//  Each "fold" is a Lorentzian gradient (1/(1+d²/σ²)) — a smooth
-//  bell-shaped shadow centered on the crease line. ~35 folds are
-//  layered together, each with a paired highlight offset to simulate
-//  the way fabric catches light on one side of a fold.
-//
-//  The curtain is rendered at 1/3 resolution onto an offscreen canvas,
-//  then upscaled with bilinear interpolation — the upscale itself acts
-//  as a free Gaussian blur, giving the fabric its characteristic soft
-//  diffused look without any filter overhead.
-//
-//  Folds are connected via a 4-pass neighbour blur on their swing
-//  values, so when one fold moves, adjacent folds are pulled along —
-//  simulating real fabric tension.
-//
-//  Animation is extremely subtle: base amplitudes of 0.018–0.025
-//  (≈2% of screen width), with a belly-shaped hang curve that peaks
-//  at mid-height so the curtain breathes gently in the center rather
-//  than swinging at the bottom.
-// ═══════════════════════════════════════════════════════
-
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 
 const small = document.createElement('canvas');
 const sctx  = small.getContext('2d');
-const SCALE = 3;
+const SCALE = 4;
 
 function resize() {
   canvas.width  = innerWidth;
@@ -97,94 +29,109 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ─── Fold generation ─────────────────────────────────
-const NUM_FOLDS = 35;
-const FOLDS     = [];
+// ─── Generate 26 folds with varied character ──────────
+// Each fold has:
+//   relPos  – anchor X at the rod
+//   sigmaT  – crease width at top (tight, gathered)
+//   sigmaB  – crease width at bottom (loose, open)
+//   depth   – shadow intensity
+//   phase   – individual breeze timing
+//   weight  – how much this fold's motion propagates to neighbours
 
+const NUM_FOLDS = 26;
+const FOLDS = [];
 for (let i = 0; i < NUM_FOLDS; i++) {
-  const nx   = (i + 0.5) / NUM_FOLDS;
-  const tier = i % 3;  // 0: main, 1: fine, 2: mid
-
+  const nx = (i + 0.5) / NUM_FOLDS;
+  // Alternate between deeper main folds and shallower secondary folds
+  const isMain = i % 2 === 0;
   FOLDS.push({
-    relPos: 0.01 + nx * 0.98,
-    sigmaT: [0.022, 0.014, 0.018][tier],   // soft at top
-    sigmaB: [0.048, 0.030, 0.038][tier],    // wider at bottom
-    depth:  [0.30,  0.16,  0.22 ][tier],
-    phase:  (i * 1.618) % (Math.PI * 2),    // golden ratio stagger
-    weight: [1.0,   0.55,  0.75 ][tier],
+    relPos: 0.02 + nx * 0.96,
+    sigmaT: isMain ? 0.028 : 0.020,
+    sigmaB: isMain ? 0.055 : 0.038,
+    depth:  isMain ? 0.48  : 0.30,
+    phase:  (i * 1.37) % (Math.PI * 2),   // golden-ratio-ish stagger
+    weight: isMain ? 1.0 : 0.6,
   });
 }
 
-// ─── Breeze — extremely subtle ───────────────────────
+// ─── Breeze system with neighbour propagation ─────────
+// Each fold has a base swing. Then each fold's displacement
+// is blended with its neighbours — so when one fold moves,
+// the fabric on either side gets dragged along.
+
+// Base swing for a single fold — pure time function, NO ny
 function baseSwing(t, phase) {
   return (
-    Math.sin(t * 0.40 + phase)               * 0.025 +
-    Math.sin(t * 0.85 + phase * 1.6 + 1.5)   * 0.012 +
-    Math.sin(t * 0.18 + phase * 0.7 + 2.9)   * 0.018
+    Math.sin(t * 0.55 + phase)                * 0.060 +
+    Math.sin(t * 1.15 + phase * 1.8 + 1.4)   * 0.028 +
+    Math.sin(t * 0.22 + phase * 0.7 + 2.8)   * 0.042
   );
 }
 
+// Precompute base swings, then blur them across neighbours
 const swingRaw    = new Float32Array(NUM_FOLDS);
 const swingSmooth = new Float32Array(NUM_FOLDS);
 
 function computeSwings(t) {
+  // Step 1: raw individual swings
   for (let i = 0; i < NUM_FOLDS; i++) {
     swingRaw[i] = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight;
   }
-  // 4-pass neighbour blur — fabric tension
-  for (let pass = 0; pass < 4; pass++) {
+
+  // Step 2: propagate to neighbours — 3-pass gaussian-ish blur
+  // This simulates fabric tension: when fold 5 moves, folds 4 & 6 get pulled
+  for (let pass = 0; pass < 3; pass++) {
     const src = pass === 0 ? swingRaw : swingSmooth;
     for (let i = 0; i < NUM_FOLDS; i++) {
-      const p2 = i > 1              ? src[i-2] : src[Math.max(0, i-1)];
-      const p1 = i > 0              ? src[i-1] : src[i];
-      const n1 = i < NUM_FOLDS - 1  ? src[i+1] : src[i];
-      const n2 = i < NUM_FOLDS - 2  ? src[i+2] : src[Math.min(NUM_FOLDS-1, i+1)];
-      swingSmooth[i] = src[i] * 0.36 + (p1+n1) * 0.20 + (p2+n2) * 0.07;
+      const prev = i > 0              ? src[i - 1] : src[i];
+      const next = i < NUM_FOLDS - 1  ? src[i + 1] : src[i];
+      // 50% self + 25% each neighbour — strong coupling
+      swingSmooth[i] = src[i] * 0.50 + prev * 0.25 + next * 0.25;
     }
   }
 }
 
 // ─── Per-row precompute ───────────────────────────────
-const ROW_FX    = new Float32Array(NUM_FOLDS);
-const ROW_S2    = new Float32Array(NUM_FOLDS);
-const ROW_DEPTH = new Float32Array(NUM_FOLDS);
+const ROW_DATA = new Float32Array(NUM_FOLDS * 2); // [fx, s2, fx, s2, ...]
 
 function precomputeRow(ny) {
-  // Sigma blend: soft power curve — folds are already gentle at top
-  const blend = Math.pow(ny, 0.65);
+  // hang: exponential loosening — very stiff at top, very loose at bottom
+  // Using a steeper curve (0.5) so bottom half really swings
+  const hang = Math.pow(ny, 0.50);
 
-  // Belly-shaped hang: peaks at mid-height, gentle at top and bottom
-  // The curtain breathes in the center, not swinging at the hem
-  const belly = Math.sin(ny * Math.PI) * 0.80 + ny * 0.20;
+  // Additional loosening: bottom 30% gets extra amplitude
+  const extraLoose = ny > 0.7 ? (ny - 0.7) / 0.3 : 0;
+  const totalHang  = hang + extraLoose * 0.4;
 
   for (let i = 0; i < NUM_FOLDS; i++) {
-    const f = FOLDS[i];
-
-    ROW_FX[i]    = f.relPos + swingSmooth[i] * belly;
-    const sigma  = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
-    ROW_S2[i]    = sigma * sigma;
-    ROW_DEPTH[i] = f.depth * (1.0 - blend * 0.15); // slightly deeper at top
+    const f     = FOLDS[i];
+    const fx    = f.relPos + swingSmooth[i] * totalHang;
+    // Sigma widens gently — soft at top, wider at bottom
+    const blend = Math.pow(ny, 0.7);  // opens early, already soft near rod
+    const sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
+    ROW_DATA[i * 2]     = fx;
+    ROW_DATA[i * 2 + 1] = sigma * sigma;
   }
 }
 
-// ─── Pixel light ──────────────────────────────────────
+// ─── Pixel light function ─────────────────────────────
 function lightAt(nx) {
   let light = 1.0;
 
   for (let i = 0; i < NUM_FOLDS; i++) {
-    const d  = nx - ROW_FX[i];
-    const d2 = d * d;
-    const s2 = ROW_S2[i];
-    const dep = ROW_DEPTH[i];
+    const fx  = ROW_DATA[i * 2];
+    const s2  = ROW_DATA[i * 2 + 1];
+    const d   = nx - fx;
+    const d2  = d * d;
 
-    // Shadow
-    light -= dep / (1 + d2 / s2);
+    // Shadow — Lorentzian
+    light -= FOLDS[i].depth / (1 + d2 / s2);
 
-    // Highlight — subtle bright ridge
+    // Highlight — offset, narrower
     const sigma = Math.sqrt(s2);
-    const hd    = d - sigma * 0.60;
-    const hs2   = s2 * 0.22;
-    light += (dep * 0.48) / (1 + (hd * hd) / hs2);
+    const hd    = d - sigma * 0.68;
+    const hs2   = s2 * 0.25;
+    light += (FOLDS[i].depth * 0.58) / (1 + (hd * hd) / hs2);
   }
 
   return light;
@@ -203,37 +150,23 @@ function draw(ms) {
   }
   const data = imgCache.data;
 
+  // Compute this frame's breeze swings (with neighbour propagation)
   computeSwings(t);
 
   for (let y = 0; y < SH; y++) {
     const ny = y / SH;
     precomputeRow(ny);
 
+    const vertLight = 1.0 - ny * 0.06;
+
     for (let x = 0; x < SW; x++) {
-      const nx  = x / SW;
-      const lum = lightAt(nx);
+      const lum = lightAt(x / SW) * vertLight;
+      const l   = Math.max(0, Math.min(1.15, lum));
 
-      // Window light glow: warm radial, brightest slightly above center
-      const cx = nx - 0.50;
-      const cy = ny - 0.42;
-      const glow = Math.exp(-(cx*cx*2.0 + cy*cy*3.0)) * 0.14;
-
-      // Vertical gradient: subtly brighter top (daylight), slightly dimmer bottom
-      const vert = 1.0 - ny * 0.04;
-
-      const l = Math.max(0, Math.min(1.18, lum * vert + glow));
-
-      // ── Warm white palette ──────────────────────
-      // Shadow:  rgb(192, 188, 180) — warm grey
-      // Peak:    rgb(255, 253, 248) — ivory white
-      // Glow:    golden warmth added where light bleeds through
-      const warmth = glow * 2.2;
-
-      const r = Math.min(255, Math.round(192 + l * 63  + warmth * 22));
-      const g = Math.min(255, Math.round(188 + l * 65  + warmth * 16));
-      const b = Math.min(255, Math.round(180 + l * 68  + warmth * 4));
-
-      // Sheer translucency: high base alpha, compounds on overlap
+      // Warm ivory: shadow rgb(192,188,180) → peak rgb(255,253,248)
+      const r = Math.min(255, Math.round(192 + l * 63));
+      const g = Math.min(255, Math.round(188 + l * 65));
+      const b = Math.min(255, Math.round(180 + l * 68));
       const a = Math.round(Math.min(255, 175 + (1 - Math.min(1, l)) * 42));
 
       const idx   = (y * SW + x) * 4;
@@ -246,11 +179,28 @@ function draw(ms) {
 
   sctx.putImageData(imgCache, 0, 0);
 
-  // Upscale — bilinear smoothing = soft fabric diffusion
+  // Upscale with bilinear smoothing → natural blur
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(small, 0, 0, canvas.width, canvas.height);
+
+  const W = canvas.width, H = canvas.height;
+
+  // Rod shadow
+  const rod = ctx.createLinearGradient(0, 0, 0, H * 0.07);
+  rod.addColorStop(0,   'rgba(170,165,155,0.30)');
+  rod.addColorStop(0.5, 'rgba(170,165,155,0.06)');
+  rod.addColorStop(1,   'rgba(170,165,155,0)');
+  ctx.fillStyle = rod;
+  ctx.fillRect(0, 0, W, H * 0.07);
+
+  // Hem weight shadow
+  const hem = ctx.createLinearGradient(0, H * 0.88, 0, H);
+  hem.addColorStop(0, 'rgba(165,160,150,0)');
+  hem.addColorStop(1, 'rgba(165,160,150,0.14)');
+  ctx.fillStyle = hem;
+  ctx.fillRect(0, H * 0.88, W, H * 0.12);
 
   requestAnimationFrame(draw);
 }
