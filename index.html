@@ -8,21 +8,30 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; overflow: hidden; background: #e8ecf2; }
 
-    /* Sky behind — soft navy to white gradient */
+    /* Morning sky — navy top melting into peachy sunrise at bottom */
     .sky {
       position: fixed;
       inset: 0;
       background:
-        radial-gradient(ellipse 75% 60% at 50% 40%,
-          rgba(255, 255, 255, 0.50) 0%,
-          rgba(255, 255, 255, 0.10) 55%,
+        radial-gradient(ellipse 60% 45% at 62% 68%,
+          rgba(255, 185, 120, 0.55) 0%,
+          rgba(255, 170, 100, 0.18) 50%,
           transparent 80%),
-        linear-gradient(175deg,
-          #c8d4e5 0%,
-          #d8e0ec 30%,
-          #e8edf4 55%,
-          #f0f2f8 80%,
-          #f8f9fc 100%);
+        radial-gradient(ellipse 50% 35% at 55% 78%,
+          rgba(255, 145, 80, 0.30) 0%,
+          transparent 60%),
+        radial-gradient(ellipse 80% 50% at 40% 18%,
+          rgba(120, 155, 210, 0.35) 0%,
+          rgba(120, 155, 210, 0.08) 55%,
+          transparent 80%),
+        linear-gradient(178deg,
+          #b0c0d8 0%,
+          #c5d2e2 18%,
+          #dde2ea 35%,
+          #ece5dc 52%,
+          #f5dcc5 68%,
+          #f8d0a8 82%,
+          #f2c498 100%);
       pointer-events: none;
     }
 
@@ -68,7 +77,7 @@ for (let i = 0; i < NUM_FOLDS; i++) {
     relPos: 0.02 + nx * 0.96,
     sigmaT: isMain ? 0.028 : 0.020,
     sigmaB: isMain ? 0.055 : 0.038,
-    depth:  isMain ? 0.48  : 0.30,
+    depth:  isMain ? 0.30  : 0.18,
     phase:  (i * 1.37) % (Math.PI * 2),   // golden-ratio-ish stagger
     weight: isMain ? 1.0 : 0.6,
   });
@@ -182,16 +191,32 @@ function draw(ms) {
     for (let x = 0; x < SW; x++) {
       const nx  = x / SW;
       const lum = lightAt(nx) * vertLight;
-      const l   = Math.max(0, Math.min(1.18, lum));
+      const l   = Math.max(0, Math.min(1.20, lum));
 
-      // ── Navy shadow → white highlight ────────────
-      // Shadow: navy blue  rgb(45, 55, 95)
-      // Peak:   pure white rgb(255, 255, 255)
+      // ── Moving morning sun ────────────────────────
+      // Slow arc from lower-right upward — ~3 min cycle
+      const sunX = 0.60 + Math.sin(t * 0.035) * 0.12;
+      const sunY = 0.62 + Math.cos(t * 0.035) * 0.18;
 
-      const r = Math.min(255, Math.round(45 + l * 210));
-      const g = Math.min(255, Math.round(55 + l * 200));
-      const b = Math.min(255, Math.round(95 + l * 160));
-      const a = Math.round(Math.min(255, 155 + (1 - Math.min(1, l)) * 65));
+      const sx = nx - sunX;
+      const sy = ny - sunY;
+
+      // Main sun glow — large soft peach circle
+      const sunGlow = Math.exp(-(sx*sx*1.8 + sy*sy*2.2)) * 0.50;
+      // Tighter bright core
+      const sunCore = Math.exp(-(sx*sx*5.0 + sy*sy*6.0)) * 0.25;
+
+      const peach = (sunGlow + sunCore) * l;  // only shows where fabric is lit
+
+      // ── Navy shadow → white → peachy highlight ────
+      // Shadow: navy   rgb(55, 65, 105)
+      // Mid:    white  rgb(255, 255, 255)
+      // Sun areas get peach boost on top
+
+      const r = Math.min(255, Math.round(55 + l * 200 + peach * 60));
+      const g = Math.min(255, Math.round(65 + l * 190 + peach * 32));
+      const b = Math.min(255, Math.round(105 + l * 150 - peach * 15));
+      const a = Math.round(Math.min(255, 150 + (1 - Math.min(1, l)) * 62));
 
       const idx   = (y * SW + x) * 4;
       data[idx]   = r;
@@ -219,12 +244,12 @@ function draw(ms) {
   ctx.fillStyle = rod;
   ctx.fillRect(0, 0, W, H * 0.06);
 
-  // Hem — subtle navy
-  const hem = ctx.createLinearGradient(0, H * 0.88, 0, H);
-  hem.addColorStop(0, 'rgba(45,55,90,0)');
-  hem.addColorStop(1, 'rgba(45,55,90,0.12)');
+  // Hem — warm peach reflected light from floor
+  const hem = ctx.createLinearGradient(0, H * 0.85, 0, H);
+  hem.addColorStop(0, 'rgba(240,175,110,0)');
+  hem.addColorStop(1, 'rgba(240,175,110,0.14)');
   ctx.fillStyle = hem;
-  ctx.fillRect(0, H * 0.88, W, H * 0.12);
+  ctx.fillRect(0, H * 0.85, W, H * 0.15);
 
   requestAnimationFrame(draw);
 }
