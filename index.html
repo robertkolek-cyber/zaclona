@@ -101,7 +101,7 @@ function updateFoldPull(dt) {
   const pullAccel = pullSpringK * (scrollPull - curtainPull) - pullDamping * curtainVel;
   curtainVel  += pullAccel * dt;
   curtainPull += curtainVel * dt;
-  curtainPull  = Math.max(0, Math.min(1.05, curtainPull));
+  curtainPull  = Math.max(0, Math.min(1.0, curtainPull));
 
   // Each fold chases curtainPull but with cascading delay:
   // Right folds respond first, left folds lag behind.
@@ -132,8 +132,8 @@ function precomputeRow(ny) {
   const totalHang  = hang + extraLoose * 0.4;
 
   // Bottom of curtain drags behind top when being pulled
-  // ny=0 (top) moves at full pull speed, ny=1 (bottom) lags
-  const dragLag = 1.0 - ny * ny * 0.35;
+  // ny=0 (top) moves at full pull speed, ny=1 (bottom) lags slightly
+  const dragLag = 1.0 - ny * ny * 0.18;
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     const f = FOLDS[i];
@@ -145,10 +145,9 @@ function precomputeRow(ny) {
     // The pull compresses folds together and shifts them left
     const pull = foldPull[i] * dragLag;
 
-    // Gathered position: all folds compress into a narrow band on the left
-    // As pull increases, fold moves from its natural position toward ~-0.15
-    // The gathering compresses folds closer together (fabric bunches up)
-    const gatheredX = -0.08 - (NUM_FOLDS - i) * 0.008;
+    // Gathered position: folds compress off-screen to the left.
+    // Push far enough that even the bottom (dragLag=0.65) clears the edge.
+    const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
     fx = fx * (1 - pull) + gatheredX * pull;
 
     // Folds get tighter (narrower sigma) as they bunch up
