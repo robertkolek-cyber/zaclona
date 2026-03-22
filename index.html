@@ -18,7 +18,7 @@ const ctx    = canvas.getContext('2d');
 
 const small = document.createElement('canvas');
 const sctx  = small.getContext('2d');
-const SCALE = 4;
+const SCALE = 3;  // slightly higher res for fine creases
 
 function resize() {
   canvas.width  = innerWidth;
@@ -29,44 +29,48 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// ─── Fold generation ─────────────────────────────────
-// Real curtains: fabric is ~2.5× wider than the rod.
-// At the rod the folds are compressed tight together.
-// As fabric hangs down, folds fan out to fill the full width.
+// ─── Many fine creases — like real sheer fabric ───────
+// Real sheers have 50+ fine vertical lines from the gathering tape,
+// staying close together and nearly parallel top to bottom.
+// The spread from top to bottom is very subtle — not a dramatic fan.
 
-const NUM_FOLDS = 26;
-const GATHER    = 0.40;  // at rod, folds compressed into 40% of width
+const NUM_FOLDS = 55;
+const GATHER    = 0.82;  // only 18% compression at top — subtle gather
 
 const FOLDS = [];
 for (let i = 0; i < NUM_FOLDS; i++) {
-  const even = (i + 0.5) / NUM_FOLDS;  // 0..1 evenly spaced
+  const even = (i + 0.5) / NUM_FOLDS;
 
-  // Top position: compressed toward center
   const topX = 0.5 + (even - 0.5) * GATHER;
+  const botX = 0.01 + even * 0.98;
 
-  // Bottom position: spread across full width
-  const botX = 0.02 + even * 0.96;
-
-  const isMain = i % 2 === 0;
+  // Vary fold character — every 3rd fold is slightly deeper
+  const tier = i % 3;
+  const depth  = tier === 0 ? 0.28 : tier === 1 ? 0.18 : 0.22;
+  const sigmaT = tier === 0 ? 0.005 : tier === 1 ? 0.003 : 0.004;
+  const sigmaB = tier === 0 ? 0.018 : tier === 1 ? 0.012 : 0.015;
 
   FOLDS.push({
     topX,
     botX,
-    sigmaT:  isMain ? 0.006 : 0.004,   // very tight at rod
-    sigmaB:  isMain ? 0.052 : 0.034,   // wide and loose at hem
-    depthT:  isMain ? 0.55  : 0.35,    // deep shadow when compressed
-    depthB:  isMain ? 0.32  : 0.20,    // softer when spread open
-    phase:   (i * 1.37) % (Math.PI * 2),
-    weight:  isMain ? 1.0 : 0.6,
+    sigmaT,
+    sigmaB,
+    depthT: depth * 1.3,   // deeper when compressed at top
+    depthB: depth,
+    phase:  (i * 1.37) % (Math.PI * 2),
+    weight: tier === 0 ? 1.0 : 0.7,
   });
 }
 
-// ─── Breeze with neighbour propagation ────────────────
+// ─── Breeze ───────────────────────────────────────────
+// Gentle belly push — the whole curtain billows softly outward
+// in the middle, not a dramatic bottom swing.
+
 function baseSwing(t, phase) {
   return (
-    Math.sin(t * 0.55 + phase)                * 0.065 +
-    Math.sin(t * 1.15 + phase * 1.8 + 1.4)   * 0.030 +
-    Math.sin(t * 0.22 + phase * 0.7 + 2.8)   * 0.045
+    Math.sin(t * 0.50 + phase)                * 0.035 +
+    Math.sin(t * 1.05 + phase * 1.7 + 1.4)   * 0.016 +
+    Math.sin(t * 0.20 + phase * 0.6 + 2.8)   * 0.025
   );
 }
 
@@ -77,13 +81,15 @@ function computeSwings(t) {
   for (let i = 0; i < NUM_FOLDS; i++) {
     swingRaw[i] = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight;
   }
-  // 3-pass neighbour blur — fabric tension coupling
-  for (let pass = 0; pass < 3; pass++) {
+  // 4-pass neighbour blur — strong fabric tension coupling
+  for (let pass = 0; pass < 4; pass++) {
     const src = pass === 0 ? swingRaw : swingSmooth;
     for (let i = 0; i < NUM_FOLDS; i++) {
-      const prev = i > 0              ? src[i - 1] : src[i];
-      const next = i < NUM_FOLDS - 1  ? src[i + 1] : src[i];
-      swingSmooth[i] = src[i] * 0.50 + prev * 0.25 + next * 0.25;
+      const p2 = i > 1             ? src[i - 2] : src[Math.max(0, i - 1)];
+      const p1 = i > 0             ? src[i - 1] : src[i];
+      const n1 = i < NUM_FOLDS - 1 ? src[i + 1] : src[i];
+      const n2 = i < NUM_FOLDS - 2 ? src[i + 2] : src[Math.min(NUM_FOLDS - 1, i + 1)];
+      swingSmooth[i] = src[i] * 0.36 + (p1 + n1) * 0.20 + (p2 + n2) * 0.07;
     }
   }
 }
@@ -94,28 +100,23 @@ const ROW_S2    = new Float32Array(NUM_FOLDS);
 const ROW_DEPTH = new Float32Array(NUM_FOLDS);
 
 function precomputeRow(ny) {
-  // spread: how much the folds have fanned out from the gathered top
-  // Starts slow (stays bunched), then opens up
-  const spread = Math.pow(ny, 0.65);
+  // Very subtle spread — the creases stay mostly vertical
+  const spread = Math.pow(ny, 0.8);
 
-  // hang: how much the breeze can push the bottom
-  const hang = Math.pow(ny, 0.50);
-  const extraLoose = ny > 0.7 ? (ny - 0.7) / 0.3 : 0;
-  const totalHang  = hang + extraLoose * 0.45;
+  // Breeze hang: gentle belly, not bottom-heavy
+  // Peaks around 60-70% height (mid-to-lower), less at very bottom (hem weight)
+  const belly = Math.sin(ny * Math.PI) * 0.85 + ny * 0.15;
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     const f = FOLDS[i];
 
-    // X position: interpolate from gathered (topX) to spread (botX)
-    const baseX = f.topX + (f.botX - f.topX) * spread;
-    ROW_FX[i]   = baseX + swingSmooth[i] * totalHang;
+    const baseX   = f.topX + (f.botX - f.topX) * spread;
+    ROW_FX[i]     = baseX + swingSmooth[i] * belly;
 
-    // Sigma: very tight at top, opens with the spread
-    const sigma  = f.sigmaT + (f.sigmaB - f.sigmaT) * spread;
-    ROW_S2[i]    = sigma * sigma;
+    const sigma   = f.sigmaT + (f.sigmaB - f.sigmaT) * spread;
+    ROW_S2[i]     = sigma * sigma;
 
-    // Depth: deeper shadows when compressed, softer when open
-    ROW_DEPTH[i] = f.depthT + (f.depthB - f.depthT) * spread;
+    ROW_DEPTH[i]  = f.depthT + (f.depthB - f.depthT) * spread;
   }
 }
 
@@ -130,14 +131,14 @@ function lightAt(nx) {
     const d   = nx - fx;
     const d2  = d * d;
 
-    // Shadow
+    // Shadow — fine Lorentzian crease line
     light -= dep / (1 + d2 / s2);
 
-    // Highlight — offset right, narrower
+    // Highlight — subtle bright ridge just right of shadow
     const sigma = Math.sqrt(s2);
-    const hd    = d - sigma * 0.65;
-    const hs2   = s2 * 0.22;
-    light += (dep * 0.55) / (1 + (hd * hd) / hs2);
+    const hd    = d - sigma * 0.60;
+    const hs2   = s2 * 0.20;
+    light += (dep * 0.45) / (1 + (hd * hd) / hs2);
   }
 
   return light;
@@ -162,16 +163,32 @@ function draw(ms) {
     const ny = y / SH;
     precomputeRow(ny);
 
-    const vertLight = 1.0 - ny * 0.05;
-
+    // Light coming through: brighter in center, dimmer at edges
+    // Simulates the window light behind the sheer fabric
     for (let x = 0; x < SW; x++) {
-      const lum = lightAt(x / SW) * vertLight;
-      const l   = Math.max(0, Math.min(1.15, lum));
+      const nx = x / SW;
 
-      const r = Math.min(255, Math.round(112 + l * 143));
-      const g = Math.min(255, Math.round(116 + l * 139));
-      const b = Math.min(255, Math.round(130 + l * 125));
-      const a = Math.round(Math.min(255, 138 + (1 - Math.min(1, l)) * 82));
+      const lum = lightAt(nx);
+
+      // Window light: warm glow from behind, brightest center-bottom
+      const cx = nx - 0.5;
+      const cy = ny - 0.55;
+      const windowLight = Math.exp(-(cx * cx * 1.8 + cy * cy * 2.5)) * 0.18;
+
+      const l = Math.max(0, Math.min(1.2, lum + windowLight));
+
+      // Warm white palette — ivory, not grey
+      // Shadow: warm grey rgb(185, 180, 172)
+      // Peak: warm white rgb(255, 253, 248)
+      // Through-light: slightly golden
+      const warmth = windowLight * 2.5;  // adds golden tone where light comes through
+
+      const r = Math.min(255, Math.round(185 + l * 70  + warmth * 30));
+      const g = Math.min(255, Math.round(180 + l * 73  + warmth * 22));
+      const b = Math.min(255, Math.round(172 + l * 76  + warmth * 5));
+
+      // Translucent: the fabric is sheer — high base alpha, slightly more opaque in shadow
+      const a = Math.round(Math.min(255, 165 + (1 - Math.min(1, l)) * 50));
 
       const idx   = (y * SW + x) * 4;
       data[idx]   = r;
@@ -190,20 +207,13 @@ function draw(ms) {
 
   const W = canvas.width, H = canvas.height;
 
-  // Rod shadow — crisp at very top
-  const rod = ctx.createLinearGradient(0, 0, 0, H * 0.08);
-  rod.addColorStop(0,    'rgba(130,134,148,0.40)');
-  rod.addColorStop(0.35, 'rgba(130,134,148,0.10)');
-  rod.addColorStop(1,    'rgba(130,134,148,0)');
+  // Very fine rod shadow at top
+  const rod = ctx.createLinearGradient(0, 0, 0, H * 0.04);
+  rod.addColorStop(0,   'rgba(160,155,145,0.30)');
+  rod.addColorStop(0.5, 'rgba(160,155,145,0.06)');
+  rod.addColorStop(1,   'rgba(160,155,145,0)');
   ctx.fillStyle = rod;
-  ctx.fillRect(0, 0, W, H * 0.08);
-
-  // Hem weight
-  const hem = ctx.createLinearGradient(0, H * 0.88, 0, H);
-  hem.addColorStop(0, 'rgba(120,124,138,0)');
-  hem.addColorStop(1, 'rgba(120,124,138,0.15)');
-  ctx.fillStyle = hem;
-  ctx.fillRect(0, H * 0.88, W, H * 0.12);
+  ctx.fillRect(0, 0, W, H * 0.04);
 
   requestAnimationFrame(draw);
 }
