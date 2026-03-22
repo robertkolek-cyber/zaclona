@@ -1,12 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Curtain</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #ffffff; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #fff; }
     canvas { position: fixed; inset: 0; display: block; }
   </style>
 </head>
@@ -16,142 +16,162 @@
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
 
+// Render at low resolution — bilinear upscale = free blur
+const small = document.createElement('canvas');
+const sctx  = small.getContext('2d');
+const SCALE = 4;
+
 function resize() {
   canvas.width  = innerWidth;
   canvas.height = innerHeight;
+  small.width   = Math.round(innerWidth  / SCALE);
+  small.height  = Math.round(innerHeight / SCALE);
 }
 window.addEventListener('resize', resize);
 resize();
 
-const COLS = 300;
-const ROWS = 240;
+// ─── Fold definitions ─────────────────────────────────
+// relPos : base horizontal position 0..1
+// sigma  : shadow width (normalized, ~0.02–0.05)
+// depth  : how dark the shadow is 0..1
+// phase  : breeze phase offset per fold (makes each fold move slightly differently)
+const FOLDS = [
+  // Main drape folds — wide, generous shadow
+  { relPos: 0.07,  sigma: 0.038, depth: 0.24, phase: 0.00 },
+  { relPos: 0.22,  sigma: 0.044, depth: 0.27, phase: 0.80 },
+  { relPos: 0.40,  sigma: 0.042, depth: 0.25, phase: 1.60 },
+  { relPos: 0.58,  sigma: 0.042, depth: 0.25, phase: 2.40 },
+  { relPos: 0.76,  sigma: 0.044, depth: 0.27, phase: 1.10 },
+  { relPos: 0.93,  sigma: 0.038, depth: 0.24, phase: 0.40 },
+  // Surface creases — narrow, barely-there
+  { relPos: 0.14,  sigma: 0.016, depth: 0.11, phase: 2.10 },
+  { relPos: 0.31,  sigma: 0.014, depth: 0.09, phase: 1.30 },
+  { relPos: 0.49,  sigma: 0.017, depth: 0.11, phase: 0.60 },
+  { relPos: 0.67,  sigma: 0.014, depth: 0.09, phase: 1.90 },
+  { relPos: 0.85,  sigma: 0.016, depth: 0.11, phase: 0.90 },
+];
 
-// ─── Silk shading model ───────────────────────────────
-// facing ∈ [0,1]: 0 = edge-on (shadow), 1 = face-on (peak)
-//
-// Silk is cool-neutral. Shadow: blue-grey. Peak: pure white.
-// Strong specular spike right at the highlight — that's what
-// makes silk look like silk instead of cotton.
+// Precomputed sigma² values
+FOLDS.forEach(f => { f.s2 = f.sigma * f.sigma; });
 
-function shadeColor(facing) {
-  // Diffuse channel: shadow → white
-  // Shadow has a cool cast (more blue than red)
-  const sR = 155, sG = 158, sB = 168;  // cool grey shadow
-  const hR = 255, hG = 255, hB = 255;  // pure white peak
-
-  // Soft diffuse base
-  const diffuse = Math.pow(facing, 1.4);  // slight roll-off
-
-  let r = sR + diffuse * (hR - sR);
-  let g = sG + diffuse * (hG - sG);
-  let b = sB + diffuse * (hB - sB);
-
-  // Specular spike — silk catches a sharp highlight near peak
-  // Only activates when facing > 0.72
-  const specFacing = Math.max(0, (facing - 0.72) / 0.28);
-  const spec = Math.pow(specFacing, 3.5) * 38;
-
-  // Specular is slightly cool-white (silk sheen)
-  r = Math.min(255, r + spec * 0.90);
-  g = Math.min(255, g + spec * 0.92);
-  b = Math.min(255, b + spec * 1.00);  // fractionally more blue in spec
-
-  return [Math.round(r), Math.round(g), Math.round(b)];
+// ─── Breeze displacement (returns Δnx) ───────────────
+function breezeOffset(ny, t, phase) {
+  // hang: top is pinned, bottom swings freely
+  const hang = Math.pow(ny, 0.48);
+  return (
+    Math.sin(ny * 3.2  - t * 0.80 + phase * 1.40) * 0.024 +
+    Math.sin(ny * 6.8  - t * 0.55 + phase * 2.20 + 1.2) * 0.011 +
+    Math.sin(ny * 13.0 - t * 1.10 + phase * 3.50 + 2.7) * 0.005 +
+    Math.sin(t  * 0.22 + phase * 0.70) * 0.012             // slow full-fabric swell
+  ) * hang;
 }
 
-// ─── Displacement ────────────────────────────────────
-function xDisplace(col, y, H, t) {
-  const nx = col / COLS;
-  const ny = y / H;
+// ─── Pixel light function ─────────────────────────────
+// Returns luminance multiplier: 1 = neutral, <1 = shadow, slightly >1 = sheen
+function lightAt(nx, ny, foldXs) {
+  let light = 1.0;
 
-  // Silk hangs lightly — bottom floats, top pinned
-  const hang = Math.pow(ny, 0.45);   // softer curve than linen
+  for (let i = 0; i < FOLDS.length; i++) {
+    const fold = FOLDS[i];
+    const fx   = foldXs[i];
+    const dist = nx - fx;
+    const d2   = dist * dist;
 
-  // ── Main folds — elegant, fewer, wider ──
-  // Silk drapes in large smooth waves, not tight gathers
-  const fold =
-    Math.sin(nx * Math.PI * 3.5 + 0.4)  * 38 +   // large primary folds
-    Math.sin(nx * Math.PI * 7.0 + 1.8)  * 16 +   // secondary folds
-    Math.sin(nx * Math.PI * 14.0 + 3.3) *  5;    // fine surface detail
+    // Shadow — Lorentzian (smooth, no exp needed, fast)
+    light -= fold.depth / (1 + d2 / fold.s2);
 
-  // ── Breeze — light and quick, silk catches air easily ──
-  const b1 = Math.sin(ny * 3.2  - t * 1.00 + nx * Math.PI * 2.2)        * 28 * hang;
-  const b2 = Math.sin(ny * 6.5  - t * 0.65 + nx * Math.PI * 4.0 + 1.6)  * 14 * hang;
-  const b3 = Math.sin(ny * 11.8 - t * 1.40 + nx * Math.PI * 7.5 + 2.9)  *  6 * hang;
-
-  // ── Full-cloth swell — slow and elegant ──
-  const swell = Math.sin(t * 0.22 + nx * Math.PI * 1.5 + 0.8) * 18 * hang;
-
-  return fold + b1 + b2 + b3 + swell;
-}
-
-// ─── Build grid ───────────────────────────────────────
-function buildGrid(W, H, t) {
-  const grid = [];
-  for (let c = 0; c <= COLS; c++) {
-    const strip = new Float32Array(ROWS + 1);
-    for (let r = 0; r <= ROWS; r++) {
-      strip[r] = (c / COLS) * W + xDisplace(c, (r / ROWS) * H, H, t);
-    }
-    grid.push(strip);
+    // Highlight — narrower, offset just to the right of the shadow peak
+    const hd   = dist - fold.sigma * 0.75;
+    const hs2  = fold.s2 * 0.35;
+    light += (fold.depth * 0.5) / (1 + (hd * hd) / hs2);
   }
-  return grid;
+
+  return light;
 }
 
-// ─── Draw ─────────────────────────────────────────────
+// ─── Draw loop ────────────────────────────────────────
+let imgCache = null;
+
 function draw(ms) {
-  const t = ms * 0.001;
+  const t  = ms * 0.001;
+  const SW = small.width;
+  const SH = small.height;
+
+  // Reuse ImageData allocation
+  if (!imgCache || imgCache.width !== SW || imgCache.height !== SH) {
+    imgCache = sctx.createImageData(SW, SH);
+  }
+  const data = imgCache.data;
+
+  // Precompute fold X for each row (avoids trig in inner loop)
+  // foldXByRow[i][y] = animated X position of fold i at row y
+  const foldXByRow = FOLDS.map((fold, i) => {
+    const xs = new Float32Array(SH);
+    for (let y = 0; y < SH; y++) {
+      xs[y] = fold.relPos + breezeOffset(y / SH, t, fold.phase);
+    }
+    return xs;
+  });
+
+  const rowFoldXs = new Float32Array(FOLDS.length);
+
+  for (let y = 0; y < SH; y++) {
+    const ny = y / SH;
+
+    // Gather this row's fold positions into a flat array (cache-friendly)
+    for (let i = 0; i < FOLDS.length; i++) rowFoldXs[i] = foldXByRow[i][y];
+
+    // Vertical light gradient: slightly brighter near top (window above)
+    const vertLight = 1.0 - ny * 0.08;
+
+    for (let x = 0; x < SW; x++) {
+      const nx  = x / SW;
+      const lum = lightAt(nx, ny, rowFoldXs) * vertLight;
+
+      // Silk colour: cool-neutral
+      // Shadow end → rgb(148, 151, 162)  ·  White end → rgb(255, 255, 255)
+      const l = Math.max(0, Math.min(1.12, lum));
+
+      const r = Math.min(255, Math.round(148 + l * 107));
+      const g = Math.min(255, Math.round(151 + l * 104));
+      const b = Math.min(255, Math.round(162 + l * 93 ));
+
+      // Alpha: fabric is translucent; shadows compound it slightly
+      const a = Math.round(Math.min(255, 148 + (1 - Math.min(1, l)) * 65));
+
+      const idx   = (y * SW + x) * 4;
+      data[idx]   = r;
+      data[idx+1] = g;
+      data[idx+2] = b;
+      data[idx+3] = a;
+    }
+  }
+
+  sctx.putImageData(imgCache, 0, 0);
+
+  // ── Upscale onto main canvas ──────────────────────────
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(small, 0, 0, canvas.width, canvas.height);
+
   const W = canvas.width;
   const H = canvas.height;
 
-  ctx.clearRect(0, 0, W, H);
+  // ── Overlay: top hang shadow (curtain rod edge) ───────
+  const rodGrad = ctx.createLinearGradient(0, 0, 0, H * 0.055);
+  rodGrad.addColorStop(0,   'rgba(160,163,172,0.30)');
+  rodGrad.addColorStop(0.5, 'rgba(160,163,172,0.08)');
+  rodGrad.addColorStop(1,   'rgba(160,163,172,0)');
+  ctx.fillStyle = rodGrad;
+  ctx.fillRect(0, 0, W, H * 0.055);
 
-  const colW = W / COLS;
-  const grid = buildGrid(W, H, t);
-
-  for (let c = 0; c < COLS; c++) {
-    for (let r = 0; r < ROWS; r++) {
-      const y0 = (r       / ROWS) * H;
-      const y1 = ((r + 1) / ROWS) * H;
-
-      const x00 = grid[c    ][r    ];
-      const x10 = grid[c + 1][r    ];
-      const x01 = grid[c    ][r + 1];
-      const x11 = grid[c + 1][r + 1];
-
-      // Surface normal from horizontal slope
-      const slope = ((x10 - x00) + (x11 - x01)) * 0.5 / colW;
-
-      // Map slope → facing [0,1]
-      // slope ~1 at rest; deviates with fold angle
-      // Use tanh to get a smooth S-curve that emphasises edges
-      const raw    = Math.max(0, Math.min(1, 0.5 - slope * 0.48));
-      const facing = 0.5 * (1 + Math.tanh((raw - 0.5) * 4.5));
-
-      const [r_ch, g_ch, b_ch] = shadeColor(facing);
-
-      // Silk is more translucent than linen
-      // Folds that overlap read naturally more opaque
-      ctx.globalAlpha = 0.62;
-      ctx.fillStyle   = `rgb(${r_ch},${g_ch},${b_ch})`;
-
-      ctx.beginPath();
-      ctx.moveTo(x00, y0);
-      ctx.lineTo(x10, y0);
-      ctx.lineTo(x11, y1);
-      ctx.lineTo(x01, y1);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
-
-  // Barely-there top hang shadow
-  ctx.globalAlpha = 1;
-  const topGrad = ctx.createLinearGradient(0, 0, 0, H * 0.035);
-  topGrad.addColorStop(0, 'rgba(140,143,152,0.22)');
-  topGrad.addColorStop(1, 'rgba(140,143,152,0)');
-  ctx.fillStyle = topGrad;
-  ctx.fillRect(0, 0, W, H * 0.035);
+  // ── Overlay: bottom very soft shadow (hem weight) ─────
+  const hemGrad = ctx.createLinearGradient(0, H * 0.88, 0, H);
+  hemGrad.addColorStop(0, 'rgba(140,143,152,0)');
+  hemGrad.addColorStop(1, 'rgba(140,143,152,0.12)');
+  ctx.fillStyle = hemGrad;
+  ctx.fillRect(0, H * 0.88, W, H * 0.12);
 
   requestAnimationFrame(draw);
 }
