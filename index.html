@@ -153,20 +153,35 @@ canvas.addEventListener('touchend', () => {
   mouseVY = 0;
 });
 
-// ─── Breeze with gust + mouse + neighbour propagation ─
+// ─── Breeze — natural wind physics ────────────────────
 //
-// Real breeze: wind pushes ALL folds in the SAME direction at the
-// same time. The main wave is global. Each fold only gets a tiny
-// individual offset so they're not perfectly rigid — like real fabric
-// has micro-variations but the overall motion is coherent.
+// Real wind through a curtain:
+// 1. Mostly still — long calm, then a gust
+// 2. One direction — pushes OUT (positive), gravity pulls back
+// 3. Traveling wave — hits left side first, ripples right
+// 4. Asymmetric — slow push out, faster fall back
+// 5. Irregular — never perfectly periodic
+//
+// We simulate this with layered sine waves at IRRATIONAL frequency
+// ratios (so they never repeat), clamped to be mostly positive
+// (wind pushes one way, gravity returns), and staggered across
+// folds to create a traveling wave.
 
-function globalWind(t) {
-  // One unified wind force — all folds feel the same push
-  return (
-    Math.sin(t * 0.50)        * 0.065 +
-    Math.sin(t * 1.10 + 1.4)  * 0.030 +
-    Math.sin(t * 0.20 + 2.8)  * 0.045
+function windForce(t) {
+  // Layer sine waves at irrational ratios — never repeats
+  const raw = (
+    Math.sin(t * 0.31)                  * 0.40 +
+    Math.sin(t * 0.31 * Math.SQRT2)     * 0.30 +  // √2 ratio
+    Math.sin(t * 0.31 * Math.PI)        * 0.20 +  // π ratio
+    Math.sin(t * 0.31 * 2.236)          * 0.10     // √5 ratio
   );
+
+  // Clamp mostly positive: wind pushes curtain out (into room),
+  // gravity pulls it back. Only ~20% of the time does it go negative.
+  // max(raw, raw*0.15) keeps the negative excursions very small.
+  const biased = raw > 0 ? raw : raw * 0.15;
+
+  return biased * 0.10;
 }
 
 const swingRaw    = new Float32Array(NUM_FOLDS);
@@ -176,15 +191,12 @@ function computeSwings(t, dt) {
   // ── Opening gust ─────────────────────────────────
   const elapsed  = (performance.now() - startTime) * 0.001;
   const gustMult = 1.0 + gustPeak * Math.exp(-elapsed / gustDecay)
-                       * (0.5 + 0.5 * Math.sin(elapsed * 3.5));
+                       * Math.max(0, Math.sin(elapsed * 3.5));
 
   // ── Mouse push ───────────────────────────────────
-  // Both position AND velocity push folds. Just hovering near a fold
-  // displaces it (like a hand near fabric), velocity adds extra force.
   if (mouseX >= 0) {
-    const speed        = Math.sqrt(mouseVX * mouseVX + mouseVY * mouseVY);
-    const pushDir      = mouseVX;  // horizontal push direction
-    const influence    = 0.20;     // wider radius of effect
+    const pushDir   = mouseVX;
+    const influence = 0.20;
 
     for (let i = 0; i < NUM_FOLDS; i++) {
       const foldNX = FOLDS[i].relPos;
@@ -193,27 +205,32 @@ function computeSwings(t, dt) {
         const falloff = 1 - (dist / influence);
         const f2      = falloff * falloff;
 
-        // Proximity push: just being near displaces the fold
+        // Proximity: folds part around cursor
         const direction = Math.sign(foldNX - mouseX) || 1;
         mousePush[i] += direction * f2 * dt * 8.0;
 
-        // Velocity push: swiping adds a strong directional force
+        // Velocity: swiping pushes hard
         mousePush[i] += pushDir * f2 * dt * 18.0;
       }
     }
   }
 
-  // Decay: fast but not instant — fabric springs back
   for (let i = 0; i < NUM_FOLDS; i++) {
-    mousePush[i] *= Math.pow(0.015, dt);  // ~98.5% decay/sec
+    mousePush[i] *= Math.pow(0.015, dt);
   }
 
-  // ── Combine: global wind + tiny per-fold variation + mouse ──
-  const wind = globalWind(t) * gustMult;
+  // ── Traveling wave: wind arrives at each fold with a slight delay
+  // based on position. Left folds get hit first, wave travels right.
+  // Delay is small (~0.4s across the full width) — creates a ripple.
+  const waveSpeed = 0.4;  // seconds for wave to cross full curtain
 
   for (let i = 0; i < NUM_FOLDS; i++) {
-    // Small per-fold offset: ±5% variation so they're not perfectly rigid
-    const micro = Math.sin(t * 0.8 + FOLDS[i].phase) * 0.003;
+    const foldNX  = FOLDS[i].relPos;
+    const delay   = foldNX * waveSpeed;  // left=0 delay, right=0.4s delay
+
+    const wind    = windForce(t - delay) * gustMult;
+    const micro   = Math.sin(t * 0.6 + FOLDS[i].phase) * 0.002;
+
     swingRaw[i] = (wind + micro) * FOLDS[i].weight + mousePush[i] * 0.06;
   }
 
