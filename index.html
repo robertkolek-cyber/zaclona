@@ -548,13 +548,13 @@ function updateText(dt) {
   if (tileInitialRight === null) {
     tileInitialRight = tile.getBoundingClientRect().right;
     tileInitialEdge  = curtainEdgeFrac;
-    textRight        = tileInitialRight + innerWidth * 0.12;
+    textRight        = tileInitialRight + innerWidth * 0.03;
   }
 
   // Arc shifted right: at rest text is ~12vw right of anchor,
   // as curtain pulls it drifts left, anchor area is the leftmost point
   const curtainShift = (curtainEdgeFrac - tileInitialEdge) * innerWidth;
-  const targetRight  = tileInitialRight + innerWidth * 0.12 + curtainShift;
+  const targetRight  = tileInitialRight + innerWidth * 0.03 + curtainShift;
 
   // Drift toward target with lag — wiggle room
   textRight += (targetRight - textRight) * Math.min(1, dt * 4.5);
