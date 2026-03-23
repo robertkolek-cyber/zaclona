@@ -482,21 +482,25 @@ function precomputeRow(ny) {
     ROW_DATA[i * 2 + 1] = sigma * sigma;
   }
 
-  // ── Gathering fold: sits right at the curtain's trailing edge ──
+  // ── Gathering fold: at the transition where pulled folds meet unpulled ones ──
   gatherFoldActive = curtainPull;
   if (gatherFoldActive > 0.01) {
-    // Find the rightmost point of the actual curtain
+    // Find the rightmost fold that is actually being pulled (foldPull > 0.05)
+    // — that's the visible leading edge of the gather
     let trailX = -999;
     for (let i = 0; i < NUM_FOLDS; i++) {
-      const fx = ROW_DATA[i * 2];
-      const s  = Math.sqrt(ROW_DATA[i * 2 + 1]);
-      const edge = fx + s * 2.0;
-      if (edge > trailX) trailX = edge;
+      if (foldPull[i] > 0.05) {
+        const fx = ROW_DATA[i * 2];
+        if (fx > trailX) trailX = fx;
+      }
     }
-    // Place the fold just at the trailing edge — overlaying the curtain slightly
-    const gSigma = 0.04 + curtainPull * 0.015;
-    ROW_DATA[NUM_FOLDS * 2]     = trailX - gSigma * 0.5;
-    ROW_DATA[NUM_FOLDS * 2 + 1] = gSigma * gSigma;
+    if (trailX > -999) {
+      const gSigma = 0.04 + curtainPull * 0.015;
+      ROW_DATA[NUM_FOLDS * 2]     = trailX;
+      ROW_DATA[NUM_FOLDS * 2 + 1] = gSigma * gSigma;
+    } else {
+      gatherFoldActive = 0;
+    }
   }
 }
 
