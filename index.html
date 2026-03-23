@@ -532,12 +532,21 @@ function alignLockup() {
   nameLockup.style.left = rect.left + 'px';
 }
 
+let tileInitialRight = null;
+let tileInitialEdge  = null;
+
 function updateText(dt) {
-  // Anchor text RIGHT edge to curtain right edge — last word always on curtain
-  const edgePx    = curtainEdgeFrac * innerWidth;
-  const rightPx   = Math.max(0, innerWidth - edgePx + 24);
+  // Capture initial anchor once — before any JS moves the tile
+  if (tileInitialRight === null) {
+    tileInitialRight = tile.getBoundingClientRect().right;
+    tileInitialEdge  = curtainEdgeFrac;
+  }
+
+  // Move text right edge exactly as the curtain edge moves
+  const curtainShift = (curtainEdgeFrac - tileInitialEdge) * innerWidth;
+  const newRight = tileInitialRight + curtainShift;
   tile.style.left      = 'auto';
-  tile.style.right     = rightPx + 'px';
+  tile.style.right     = Math.max(0, innerWidth - newRight) + 'px';
   tile.style.transform = 'translateY(-50%)';
   tile.style.webkitMaskImage = 'none';
   tile.style.maskImage       = 'none';
