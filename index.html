@@ -424,8 +424,8 @@ let bottomPull = 0, bottomPullVel = 0;
 function updateFoldPull(dt) {
   // Both directions: hesitation. Return is even heavier.
   const returning   = scrollPull < curtainPull;
-  const pullSpringK = returning ? 2.5 : 4.0;
-  const pullDamping = returning ? 2.8 : 3.2;
+  const pullSpringK = returning ? 1.25 : 2.0;
+  const pullDamping = returning ? 1.4  : 1.6;
   const pullAccel = pullSpringK * (scrollPull - curtainPull) - pullDamping * curtainVel;
   curtainVel  += pullAccel * dt;
   curtainPull += curtainVel * dt;
