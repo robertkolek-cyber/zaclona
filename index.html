@@ -494,9 +494,9 @@ function precomputeRow(ny) {
       if (edge > naturalEdgeX) naturalEdgeX = edge;
     }
     if (naturalEdgeX > -0.5) {
-      const gSigma = 0.038 + curtainPull * 0.012;
-      // Center fold just inside the edge so crease sits on the curtain face
-      ROW_DATA[NUM_FOLDS * 2]     = naturalEdgeX - gSigma * 1.8;
+      const gSigma = 0.045 + curtainPull * 0.01;
+      // Place fold center well inside the opaque curtain — not at the fade zone
+      ROW_DATA[NUM_FOLDS * 2]     = naturalEdgeX - gSigma * 4.0;
       ROW_DATA[NUM_FOLDS * 2 + 1] = gSigma * gSigma;
     } else {
       gatherFoldActive = 0;
@@ -643,10 +643,9 @@ function draw(ms) {
       const g = Math.min(255, Math.round(65 + l * 190  + peach * 30));
       const b = Math.min(255, Math.round(105 + l * 150 - peach * 22));
 
-      // Alpha: track rightmost fold edge per row (including gathering fold)
+      // Alpha: track rightmost fold edge — gathering fold excluded so edge is natural
       let maxFoldX = -999;
-      const edgeFolds = gatherFoldActive > 0.01 ? NUM_FOLDS + 1 : NUM_FOLDS;
-      for (let fi = 0; fi < edgeFolds; fi++) {
+      for (let fi = 0; fi < NUM_FOLDS; fi++) {
         const fx = ROW_DATA[fi * 2];
         const s2 = ROW_DATA[fi * 2 + 1];
         const edgeX = fx + Math.sqrt(s2) * 3.0;
