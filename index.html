@@ -10,7 +10,7 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { width: 100%; background: #fff; }
-    body { width: 100%; min-height: 400vh; margin: 0; padding: 0; background: #fff; }
+    body { width: 100%; margin: 0; padding: 0; background: #fff; }
     canvas { position: fixed; inset: 0; display: block; pointer-events: none; z-index: 1; }
 
     .project-tile {
@@ -199,6 +199,74 @@
       animation: none;
     }
 
+
+    /* ── Tiles section ── */
+    .tiles-section {
+      position: relative;
+      height: 1000vh;
+    }
+    .tiles-sticky {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: #0e0e0e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .tile-card {
+      position: absolute;
+      width: min(380px, 78vw);
+      aspect-ratio: 3/4;
+      border-radius: 28px;
+      padding: clamp(28px, 3.5vw, 48px);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      will-change: transform, opacity;
+      transform-origin: center center;
+      backface-visibility: hidden;
+      overflow: hidden;
+    }
+    .tile-tag {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      opacity: 0.5;
+    }
+    .tile-title {
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: clamp(26px, 3.4vw, 52px);
+      font-weight: 600;
+      line-height: 1.06;
+      letter-spacing: -0.03em;
+    }
+    .tiles-dots {
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 7px;
+      pointer-events: none;
+    }
+    .tiles-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      transition: background 0.3s, transform 0.3s;
+    }
+    .tiles-dot.active {
+      background: rgba(255,255,255,0.75);
+      transform: scale(1.5);
+    }
+
   </style>
 </head>
 <body>
@@ -233,6 +301,48 @@
 
 
 <canvas id="c"></canvas>
+
+<!-- 400vh curtain scroll space -->
+<div style="height:400vh"></div>
+
+<!-- Tiles section — 1000vh gives 900vh of effective scroll, progress 0→1 -->
+<section class="tiles-section" id="tilesSection">
+  <div class="tiles-sticky" id="tilesSticky">
+
+    <div class="tile-card" style="background:#1c1c1c;color:#f0ede8;">
+      <span class="tile-tag">Brand Identity</span>
+      <h2 class="tile-title">Monolith<br>Studio</h2>
+    </div>
+
+    <div class="tile-card" style="background:#1e1528;color:#dfd6f5;">
+      <span class="tile-tag">Product Design</span>
+      <h2 class="tile-title">Vertex<br>App</h2>
+    </div>
+
+    <div class="tile-card" style="background:#0f2218;color:#d4eedb;">
+      <span class="tile-tag">Editorial</span>
+      <h2 class="tile-title">Current<br>Magazine</h2>
+    </div>
+
+    <div class="tile-card" style="background:#101827;color:#c8d8f0;">
+      <span class="tile-tag">Interface Design</span>
+      <h2 class="tile-title">Flux<br>Dashboard</h2>
+    </div>
+
+    <div class="tile-card" style="background:#231208;color:#f0d8c4;">
+      <span class="tile-tag">Type Design</span>
+      <h2 class="tile-title">Forma<br>Typeface</h2>
+    </div>
+
+    <div class="tile-card" style="background:#f0ede8;color:#1c1c1c;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;">
+      <span class="tile-tag" style="margin-bottom:0;color:#1c1c1c;">Available for work</span>
+      <h2 class="tile-title" style="font-size:clamp(28px,4vw,58px);">Let's make<br>something<br>remarkable</h2>
+    </div>
+
+    <div class="tiles-dots" id="tilesDots"></div>
+  </div>
+</section>
+
 <script>
 // ─── Word-mask split ─────────────────────────────────
 // Wraps each word in <span class="word"><span class="wi">…</span></span>
@@ -321,8 +431,8 @@ let curtainPull = 0;
 let curtainVel  = 0;
 
 function updateScroll() {
-  const maxScroll = document.documentElement.scrollHeight - innerHeight;
-  scrollPull = maxScroll > 0 ? Math.min(1, window.scrollY / maxScroll) : 0;
+  // Curtain only responds to first 300vh of scroll (400vh section – 100vh viewport)
+  scrollPull = Math.max(0, Math.min(1, window.scrollY / (3 * innerHeight)));
 }
 window.addEventListener('scroll', updateScroll, { passive: true });
 
@@ -720,6 +830,89 @@ function draw(ms) {
 }
 
 requestAnimationFrame(draw);
+
+// ─── Tiles carousel ──────────────────────────────────
+function interpolate(p, inputs, outputs) {
+  if (p <= inputs[0]) return outputs[0];
+  if (p >= inputs[inputs.length - 1]) return outputs[outputs.length - 1];
+  for (let i = 0; i < inputs.length - 1; i++) {
+    if (p >= inputs[i] && p < inputs[i + 1]) {
+      const t = (p - inputs[i]) / (inputs[i + 1] - inputs[i]);
+      return outputs[i] + t * (outputs[i + 1] - outputs[i]);
+    }
+  }
+  return outputs[outputs.length - 1];
+}
+
+const tilesSection = document.getElementById('tilesSection');
+const tileCards    = Array.from(document.querySelectorAll('.tile-card'));
+const tilesDots    = document.getElementById('tilesDots');
+const TOTAL_ITEMS  = tileCards.length;
+
+// Build indicator dots
+tileCards.forEach(() => {
+  const d = document.createElement('span');
+  d.className = 'tiles-dot';
+  tilesDots.appendChild(d);
+});
+const dotEls = Array.from(tilesDots.querySelectorAll('.tiles-dot'));
+
+function updateTiles() {
+  const rect     = tilesSection.getBoundingClientRect();
+  const scrolled = -rect.top;
+  const progress = Math.max(0, Math.min(1, scrolled / (9 * innerHeight)));
+
+  const step    = 0.75 / TOTAL_ITEMS;
+  const isLarge = innerWidth >= 1440;
+
+  let activeDot = -1;
+
+  tileCards.forEach((card, i) => {
+    const isCTA  = i === TOTAL_ITEMS - 1;
+    const center = 0.25 + i * step;
+    const start  = center - step * 1.15;
+    const end    = center + step * 0.85;
+
+    // Scale
+    const scale = isCTA
+      ? interpolate(progress, [start, center, end], [0.85, 1.0, 1.1])
+      : interpolate(progress, [start, center, end], [0.3, 1, 3.5]);
+
+    // Opacity (5-point)
+    const opIn  = start + 0.30 * (center - start);
+    const opOut = end   - 0.20 * (end - center);
+    const opacity = interpolate(progress,
+      [start, opIn, center, opOut, end],
+      [0, 1, 1, 1, 0]);
+
+    // TranslateX in vw
+    let tx = 0;
+    if (!isCTA) {
+      const even = i % 2 === 0;
+      if (isLarge) {
+        tx = interpolate(progress, [start, center, end],
+          even ? [-5, -20, -250] : [5, 20, 250]);
+      } else {
+        const midOut = center + 0.25 * (end - center);
+        tx = interpolate(progress, [start, center, midOut, end],
+          even ? [-3, -12, -120, -250] : [3, 12, 120, 250]);
+      }
+    }
+
+    card.style.transform = `translateX(${tx}vw) scale(${scale})`;
+    card.style.opacity   = opacity;
+    card.style.zIndex    = Math.round(scale * 100);
+
+    // Active dot: 70% bias toward start of window
+    const bias = start + 0.30 * (center - start);
+    if (progress >= bias) activeDot = i;
+  });
+
+  dotEls.forEach((d, i) => d.classList.toggle('active', i === activeDot));
+}
+
+window.addEventListener('scroll', updateTiles, { passive: true });
+updateTiles();
 </script>
 </body>
 </html>
