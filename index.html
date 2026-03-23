@@ -84,40 +84,28 @@
 
     .name-lockup {
       position: fixed;
-      top: 36px;
-      left: 40px;
+      bottom: 40px;
+      left: 38%;
+      transform: translateX(-50%);
       z-index: 2;
       pointer-events: none;
       mix-blend-mode: difference;
-      opacity: 0;
-      animation: sub-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
-    }
-    .name-lockup span {
-      display: block;
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      font-weight: 500;
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: clamp(10px, 1.1vw, 14px);
+      font-weight: 600;
       color: #fff;
       letter-spacing: 0.04em;
-    }
-    .name-lockup .label {
-      font-size: clamp(9px, 0.9vw, 11px);
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      opacity: 0.6;
-      margin-bottom: 3px;
-    }
-    .name-lockup .name {
-      font-size: clamp(13px, 1.2vw, 16px);
+      white-space: nowrap;
+      opacity: 0;
+      will-change: transform, opacity;
+      animation: sub-in 1.0s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
     }
 
   </style>
 </head>
 <body>
 
-<div class="name-lockup">
-  <span class="label">Portfolio of</span>
-  <span class="name">Robert Kolek</span>
-</div>
+<div class="name-lockup" id="nameLockup">Portfolio of Robert Kolek</div>
 
 <div class="project-tile" id="tile">
   <h1>The real design is always underneath</h1>
@@ -146,7 +134,8 @@ const small = document.createElement('canvas');
 const sctx  = small.getContext('2d');
 const SCALE = 4;
 
-const tile = document.getElementById('tile');
+const tile       = document.getElementById('tile');
+const nameLockup = document.getElementById('nameLockup');
 
 
 function resize() {
@@ -283,8 +272,12 @@ function lightAt(nx) {
 function updateText() {
   const textX = curtainPull * -55;
   tile.style.transform = `translate(calc(-50% + ${textX}vw), -50%)`;
+  nameLockup.style.transform = `translateX(calc(-50% + ${textX}vw))`;
   const rawOpacity = 1 - (curtainPull - 0.35) / (0.62 - 0.35);
-  tile.style.opacity = Math.max(0, Math.min(1, rawOpacity));
+  const opacity = Math.max(0, Math.min(1, rawOpacity));
+  tile.style.opacity = opacity;
+  // Only override lockup opacity once the curtain starts fading (don't fight the intro CSS animation)
+  if (curtainPull > 0.35) nameLockup.style.opacity = opacity;
 }
 
 // ─── Draw loop ───────────────────────────────────────
