@@ -356,9 +356,9 @@ const swingSmooth = new Float32Array(NUM_FOLDS);
 
 function computeSwings(t) {
   const swell = 1.0 + windStr * 1.4;
-  const pullDampen = 1.0 - curtainPull * 0.75;
-  // Fast scroll = stiff fabric — velocity kills the looseness
-  const velDampen = Math.max(0.15, 1.0 - Math.abs(curtainVel) * 2.5);
+  const pullDampen = 1.0 - curtainPull * 0.65;
+  // Tighten slightly during fast scroll — not dramatic, just taut
+  const velDampen = Math.max(0.4, 1.0 - Math.abs(curtainVel) * 0.8);
   const dampen = pullDampen * velDampen;
   for (let i = 0; i < NUM_FOLDS; i++) {
     swingRaw[i] = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight * swell * dampen;
@@ -422,18 +422,18 @@ let curtainEdgeFrac = 1.05; // actual right edge of curtain (0..1+), from prev f
 let bottomPull = 0, bottomPullVel = 0;
 
 function updateFoldPull(dt) {
-  // Both directions: hesitation. Return is even heavier.
+  // Elegant weight: responsive but never snappy. Return is heavier.
   const returning   = scrollPull < curtainPull;
-  const pullSpringK = returning ? 0.5 : 0.8;
-  const pullDamping = returning ? 0.7 : 0.9;
+  const pullSpringK = returning ? 3.0 : 5.0;
+  const pullDamping = returning ? 3.5 : 4.0;
   const pullAccel = pullSpringK * (scrollPull - curtainPull) - pullDamping * curtainVel;
   curtainVel  += pullAccel * dt;
   curtainPull += curtainVel * dt;
   curtainPull  = Math.max(0, Math.min(1.0, curtainPull));
 
-  // Bottom spring — even lazier on return
-  const bK     = returning ? 1.2 : 4.5;
-  const bDamp  = returning ? 1.8 : 3.0;
+  // Bottom drapes heavier — always lazier, noticeably so on return
+  const bK     = returning ? 2.0 : 3.5;
+  const bDamp  = returning ? 2.5 : 2.8;
   const bAccel = bK * (curtainPull - bottomPull) - bDamp * bottomPullVel;
   bottomPullVel += bAccel * dt;
   bottomPull    += bottomPullVel * dt;
