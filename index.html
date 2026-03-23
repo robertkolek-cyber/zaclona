@@ -422,6 +422,9 @@ const ROW_DATA = new Float32Array(NUM_FOLDS * 2);
 const foldPull     = new Float32Array(NUM_FOLDS);
 const foldPullVel  = new Float32Array(NUM_FOLDS);
 
+// Vertical drape lag: bottom of curtain hangs behind top
+let bottomPull = 0, bottomPullVel = 0;
+
 function updateFoldPull(dt) {
   const pullSpringK = 8.0;
   const pullDamping = 4.5;
@@ -430,14 +433,24 @@ function updateFoldPull(dt) {
   curtainPull += curtainVel * dt;
   curtainPull  = Math.max(0, Math.min(1.0, curtainPull));
 
+  // Bottom spring — slower, so bottom always lags top (esp. on return)
+  const bAccel = 4.5 * (curtainPull - bottomPull) - 3.0 * bottomPullVel;
+  bottomPullVel += bAccel * dt;
+  bottomPull    += bottomPullVel * dt;
+  bottomPull     = Math.max(0, Math.min(1.0, bottomPull));
+
   for (let i = 0; i < NUM_FOLDS; i++) {
     const foldNX = FOLDS[i].relPos;
-    const responsiveness = 0.3 + foldNX * foldNX * 12.0;
+    const responsiveness = 0.3 + foldNX * foldNX * 10.0;
     const foldThreshold = (1.0 - foldNX) * 0.1;
-    const foldTarget = Math.max(0, (curtainPull - foldThreshold) / (1.0 - foldThreshold));
-    const clampedTarget = Math.min(1, foldTarget);
+    const foldTarget = Math.max(0, Math.min(1, (curtainPull - foldThreshold) / (1.0 - foldThreshold)));
 
-    const accel = responsiveness * (clampedTarget - foldPull[i]) - 3.0 * foldPullVel[i];
+    // Neighbors drag each other — cascade wave like real fabric
+    const left  = i > 0             ? foldPull[i - 1] : foldPull[i];
+    const right = i < NUM_FOLDS - 1 ? foldPull[i + 1] : foldPull[i];
+    const coupledTarget = foldTarget * 0.72 + (left + right) * 0.14;
+
+    const accel = responsiveness * (coupledTarget - foldPull[i]) - 3.0 * foldPullVel[i];
     foldPullVel[i] += accel * dt;
     foldPull[i]    += foldPullVel[i] * dt;
     foldPull[i]     = Math.max(0, Math.min(1.2, foldPull[i]));
@@ -461,13 +474,16 @@ function precomputeRow(ny) {
       fx += mouseDisp[i] * proximity * (0.1 + totalHang * 0.9);
     }
 
-    const pull = foldPull[i] * dragLag;
-    const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
-    fx = fx * (1 - pull) + gatheredX * pull;
+    // Vertical row pull: top tracks curtainPull, bottom lags via bottomPull
+    const ny2 = ny * ny;
+    const rowPull = curtainPull * (1 - ny2) + bottomPull * ny2;
+    // Horizontal cascade from foldPull[i], blended with row vertical lag
+    const effectivePull = foldPull[i] * (1 - ny2) + rowPull * ny2;
+    const compress = 1.0 - effectivePull * 0.85;
+    fx = fx * compress;
 
     const blend = Math.pow(ny, 0.7);
     let sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
-    sigma *= 1.0 - pull * 0.5;
 
     // Sigma swell from breeze — folds billow fatter where wind hits, stronger at bottom
     if (mouseNX >= 0) {
