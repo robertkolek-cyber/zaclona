@@ -104,11 +104,71 @@
       animation: word-rise 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
+    /* ── Use-case tiles ── */
+    .usecases {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(16px, 2.5vw, 40px);
+      padding: 0 clamp(24px, 5vw, 80px);
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    .uc-card {
+      flex: 1;
+      max-width: 340px;
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: 4px;
+      padding: clamp(20px, 2.5vw, 36px);
+      background: #fff;
+    }
+
+    .uc-card h2 {
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: clamp(16px, 1.6vw, 22px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #111;
+      margin-bottom: 10px;
+    }
+
+    .uc-card p {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: clamp(11px, 1vw, 14px);
+      font-weight: 500;
+      color: #666;
+      line-height: 1.55;
+      letter-spacing: 0;
+      text-transform: none;
+      text-align: left;
+      opacity: 1;
+      animation: none;
+    }
+
   </style>
 </head>
 <body>
 
 <div class="name-lockup" id="nameLockup">Portfolio of Robert Kolek</div>
+
+<div class="usecases" id="usecases">
+  <div class="uc-card">
+    <h2>Brand Identity</h2>
+    <p>Visual systems and identity design for startups and established companies.</p>
+  </div>
+  <div class="uc-card">
+    <h2>Product Design</h2>
+    <p>End-to-end UX and interface design from concept to shipping product.</p>
+  </div>
+  <div class="uc-card">
+    <h2>Motion & Web</h2>
+    <p>Interactive experiences and motion work that bring interfaces to life.</p>
+  </div>
+</div>
 
 <div class="project-tile" id="tile">
   <h1>The real design is always underneath</h1>
@@ -146,6 +206,7 @@ const SCALE = 4;
 
 const tile       = document.getElementById('tile');
 const nameLockup = document.getElementById('nameLockup');
+const usecases   = document.getElementById('usecases');
 
 
 function resize() {
@@ -293,6 +354,11 @@ function updateText() {
   const opacity = Math.max(0, Math.min(1, rawOpacity));
   tile.style.opacity = opacity;
   if (curtainPull > 0.35) nameLockup.style.opacity = opacity;
+
+  // Fade in use-case tiles once curtain is nearly gone
+  const ucOpacity = Math.max(0, Math.min(1, (curtainPull - 0.82) / 0.12));
+  usecases.style.opacity = ucOpacity;
+  usecases.style.pointerEvents = ucOpacity > 0.5 ? 'auto' : 'none';
 }
 
 // ─── Draw loop ───────────────────────────────────────
