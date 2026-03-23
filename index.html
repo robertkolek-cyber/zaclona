@@ -345,12 +345,11 @@ for (let i = 0; i < NUM_FOLDS; i++) {
 // ─── Breeze ──────────────────────────────────────────
 function baseSwing(t, phase) {
   return (
-    Math.sin(t * 0.55 + phase)                * 0.115 +  // main sway
-    Math.sin(t * 1.15 + phase * 1.8 + 1.4)   * 0.052 +
-    Math.sin(t * 0.22 + phase * 0.7 + 2.8)   * 0.088 +  // deep roll
-    Math.sin(t * 2.60 + phase * 2.4 + 0.9)   * 0.030 +  // ripple
-    Math.sin(t * 4.10 + phase * 1.3 + 3.7)   * 0.016 +  // flutter
-    Math.sin(t * 7.30 + phase * 3.1 + 1.2)   * 0.007    // shimmer
+    Math.sin(t * 0.55 + phase)                * 0.072 +
+    Math.sin(t * 1.15 + phase * 1.8 + 1.4)   * 0.032 +
+    Math.sin(t * 0.22 + phase * 0.7 + 2.8)   * 0.055 +
+    Math.sin(t * 2.60 + phase * 2.4 + 0.9)   * 0.016 +
+    Math.sin(t * 4.10 + phase * 1.3 + 3.7)   * 0.008
   );
 }
 
@@ -358,7 +357,7 @@ const swingRaw    = new Float32Array(NUM_FOLDS);
 const swingSmooth = new Float32Array(NUM_FOLDS);
 
 function computeSwings(t) {
-  const swell = 1.0 + windStr * 2.2; // whole curtain breathes more in a gust
+  const swell = 1.0 + windStr * 1.4; // whole curtain breathes more in a gust
   for (let i = 0; i < NUM_FOLDS; i++) {
     swingRaw[i] = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight * swell;
   }
@@ -366,7 +365,7 @@ function computeSwings(t) {
   for (let i = 0; i < NUM_FOLDS; i++) {
     const prev = i > 0             ? swingRaw[i - 1] : swingRaw[i];
     const next = i < NUM_FOLDS - 1 ? swingRaw[i + 1] : swingRaw[i];
-    swingSmooth[i] = swingRaw[i] * 0.72 + prev * 0.14 + next * 0.14;
+    swingSmooth[i] = swingRaw[i] * 0.62 + prev * 0.19 + next * 0.19;
   }
 }
 
@@ -388,7 +387,7 @@ document.addEventListener('mousemove', (e) => {
       // Smooth direction — no instant flip on direction change
       windDir += (Math.sign(dx) - windDir) * 0.25;
       // Ramp capped — fast mouse can't spike to full strength instantly
-      windStr = Math.min(1.0, windStr + speed * 4.0);
+      windStr = Math.min(1.0, windStr + speed * 2.5);
     }
   }
   mouseNX = nx;
@@ -458,8 +457,15 @@ function precomputeRow(ny, t) {
     // Mouse breeze — gaussian push at wind center, travels in mouse direction
     if (windStr > 0.002) {
       const dx = f.relPos - windCX;
-      const envelope = Math.exp(-dx * dx / 0.12);
-      fx += windDir * windStr * 0.08 * envelope * (0.1 + totalHang * 0.9);
+      const envelope = Math.exp(-dx * dx / 0.07);
+      fx += windDir * windStr * 0.05 * envelope * (0.1 + totalHang * 0.9);
+    }
+
+    // Hover warmth — even without movement, nearby folds sway a little more
+    if (mouseNX >= 0) {
+      const dx = f.relPos - mouseNX;
+      const proximity = Math.exp(-dx * dx / 0.06);
+      fx += Math.sin(t * 1.8 + f.phase * 1.4) * proximity * 0.018 * totalHang;
     }
 
     // Vertical row pull: top tracks curtainPull, bottom lags via bottomPull
@@ -476,15 +482,14 @@ function precomputeRow(ny, t) {
 
     // Each fold breathes at its own rhythm — the textile lives
     sigma *= 1.0
-      + Math.sin(t * 1.3 + f.phase * 2.1)       * 0.32
-      + Math.sin(t * 0.6 + f.phase * 0.8 + 2.3) * 0.20
-      + Math.sin(t * 3.8 + f.phase * 3.0 + 1.5) * 0.10;
+      + Math.sin(t * 1.3 + f.phase * 2.1)       * 0.18
+      + Math.sin(t * 0.6 + f.phase * 0.8 + 2.3) * 0.11;
 
     // Sigma swell — folds open where the wind packet hits
     if (windStr > 0.002) {
       const dx = f.relPos - windCX;
-      const envelope = Math.exp(-dx * dx / 0.12);
-      sigma *= 1.0 + envelope * windStr * 0.55;
+      const envelope = Math.exp(-dx * dx / 0.07);
+      sigma *= 1.0 + envelope * windStr * 0.30;
     }
 
     ROW_DATA[i * 2]     = fx;
