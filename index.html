@@ -371,10 +371,12 @@ function computeSwings(t) {
 
 // ─── Mouse breeze ────────────────────────────────────
 let mouseNX = -1, mouseNY = -1;
-let windTargetCX = 0.5; // where mouse actually is
-let windCX  = 0.5;      // lagged — follows target slowly
+let windTargetCX = 0.5; // instant mouse position
+let windCX  = 0.5;      // lagged — drifts toward target
+let windDirTarget = 0;  // instant direction
 let windDir = 0;        // smoothed direction, -1..1
-let windStr = 0;        // strength 0..1, decays over time
+let windStrTarget = 0;  // instant energy from mouse speed
+let windStr = 0;        // smoothed strength 0..1
 
 document.addEventListener('mousemove', (e) => {
   const nx = e.clientX / innerWidth;
@@ -384,10 +386,8 @@ document.addEventListener('mousemove', (e) => {
     const speed = Math.abs(dx) + Math.abs(ny - mouseNY) * 0.4;
     if (speed > 0.002) {
       windTargetCX = nx;
-      // Smooth direction — no instant flip on direction change
-      windDir += (Math.sign(dx) - windDir) * 0.25;
-      // Ramp capped — fast mouse can't spike to full strength instantly
-      windStr = Math.min(1.0, windStr + speed * 2.5);
+      windDirTarget = Math.sign(dx);
+      windStrTarget = Math.min(1.0, windStrTarget + speed * 3.5);
     }
   }
   mouseNX = nx;
@@ -396,10 +396,13 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseleave', () => { mouseNX = -1; mouseNY = -1; });
 
 function updateMouseWind(dt) {
-  // Wind center drifts toward mouse with a pleasant delay
-  windCX += (windTargetCX - windCX) * Math.min(1.0, dt * 4.5);
-  windStr *= Math.pow(0.12, dt);
-  if (windStr < 0.002) windStr = 0;
+  // Everything drifts toward targets — never jumps
+  windCX  += (windTargetCX - windCX)   * Math.min(1.0, dt * 2.8);
+  windDir += (windDirTarget - windDir)  * Math.min(1.0, dt * 3.5);
+  windStr += (windStrTarget - windStr)  * Math.min(1.0, dt * 3.0);
+  // Target decays — breeze fades after mouse stops
+  windStrTarget *= Math.pow(0.10, dt);
+  if (windStr < 0.002 && windStrTarget < 0.002) { windStr = 0; windStrTarget = 0; }
 }
 
 // ─── Per-row precompute ───────────────────────────────
