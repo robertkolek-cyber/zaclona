@@ -345,11 +345,11 @@ for (let i = 0; i < NUM_FOLDS; i++) {
 // ─── Breeze ──────────────────────────────────────────
 function baseSwing(t, phase) {
   return (
-    Math.sin(t * 0.55 + phase)                * 0.072 +
+    Math.sin(t * 0.55 + phase)                * 0.072 +  // slow sway — lifted
     Math.sin(t * 1.15 + phase * 1.8 + 1.4)   * 0.032 +
-    Math.sin(t * 0.22 + phase * 0.7 + 2.8)   * 0.055 +
-    Math.sin(t * 2.60 + phase * 2.4 + 0.9)   * 0.016 +
-    Math.sin(t * 4.10 + phase * 1.3 + 3.7)   * 0.008
+    Math.sin(t * 0.22 + phase * 0.7 + 2.8)   * 0.055 +  // deep roll — lifted
+    Math.sin(t * 2.60 + phase * 2.4 + 0.9)   * 0.016 +  // ripple
+    Math.sin(t * 4.10 + phase * 1.3 + 3.7)   * 0.008    // micro-flutter
   );
 }
 
@@ -459,13 +459,6 @@ function precomputeRow(ny, t) {
       const dx = f.relPos - windCX;
       const envelope = Math.exp(-dx * dx / 0.07);
       fx += windDir * windStr * 0.05 * envelope * (0.1 + totalHang * 0.9);
-    }
-
-    // Hover warmth — even without movement, nearby folds sway a little more
-    if (mouseNX >= 0) {
-      const dx = f.relPos - mouseNX;
-      const proximity = Math.exp(-dx * dx / 0.06);
-      fx += Math.sin(t * 1.8 + f.phase * 1.4) * proximity * 0.018 * totalHang;
     }
 
     // Vertical row pull: top tracks curtainPull, bottom lags via bottomPull
