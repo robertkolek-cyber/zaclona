@@ -256,9 +256,8 @@
 // ─── Card springs (reveal + hover) ───────────────────
 document.querySelectorAll('.uc-card').forEach(card => {
   // reveal spring
-  card._sPos     = 0;   // 0 → 1
-  card._sVel     = 0;
-  card._sFired   = false;
+  card._sPos = 0;   // 0 → 1
+  card._sVel = 0;
 
   // grain canvas overlay
   const gc = document.createElement('canvas');
@@ -460,13 +459,10 @@ function updateText(dt) {
   let anyVisible = false;
 
   cards.forEach((card, i) => {
-    if (!card._sFired && curtainPull >= triggers[i]) card._sFired = true;
-
-    if (card._sFired && card._sPos < 1.02) {
-      const accel = SK * (1 - card._sPos) - SD * card._sVel;
-      card._sVel += accel * dt;
-      card._sPos += card._sVel * dt;
-    }
+    const target = curtainPull >= triggers[i] ? 1 : 0;
+    const accel  = SK * (target - card._sPos) - SD * card._sVel;
+    card._sVel += accel * dt;
+    card._sPos  = Math.max(0, card._sPos + card._sVel * dt);
 
     const s   = Math.min(1, card._sPos);
     const blr = Math.max(0, (1 - s) * 20);   // 20px → 0
