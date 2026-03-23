@@ -8,10 +8,41 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { width: 100%; background: #fff; }
     body { width: 100%; min-height: 400vh; margin: 0; padding: 0; background: #fff; }
-    canvas { position: fixed; inset: 0; display: block; pointer-events: none; }
+    canvas { position: fixed; inset: 0; display: block; pointer-events: none; z-index: 2; }
+
+    .project-tile {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1;
+      width: 520px;
+      max-width: 90vw;
+      padding: 48px 40px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04);
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    }
+    .project-tile h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: #1a1a2e;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+    .project-tile p {
+      font-size: 16px;
+      color: #666;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
+<div class="project-tile">
+  <h1>Design starts where the surface ends.</h1>
+  <p>scroll to see what's underneath</p>
+</div>
 <canvas id="c"></canvas>
 <script>
 const canvas = document.getElementById('c');
@@ -218,16 +249,18 @@ function draw(ms) {
       const g = Math.min(255, Math.round(65 + l * 190  + peach * 30));
       const b = Math.min(255, Math.round(105 + l * 150 - peach * 22));
 
-      // Alpha: curtain becomes transparent where folds have been pulled away
-      // If all nearby folds are off-screen left, alpha fades to 0
-      let coverage = 0;
+      // Alpha: find the rightmost fold in this row.
+      // Pixels beyond that edge are transparent (no fabric there).
+      let maxFoldX = -999;
       for (let fi = 0; fi < NUM_FOLDS; fi++) {
         const fx = ROW_DATA[fi * 2];
         const s2 = ROW_DATA[fi * 2 + 1];
-        const dd = nx - fx;
-        coverage += 1.0 / (1 + (dd * dd) / (s2 * 8));
+        const edgeX = fx + Math.sqrt(s2) * 3.0;
+        if (edgeX > maxFoldX) maxFoldX = edgeX;
       }
-      const alpha = Math.min(255, Math.round(Math.min(1, coverage * 0.45) * 255));
+      // Soft edge: fade over ~3% of screen width beyond the rightmost fold
+      const edgeFade = Math.max(0, Math.min(1, (maxFoldX - nx) / 0.03));
+      const alpha = Math.round(edgeFade * 255);
 
       const idx   = (y * SW + x) * 4;
       data[idx]   = r;
