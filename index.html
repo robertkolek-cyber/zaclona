@@ -104,24 +104,11 @@
       animation: word-rise 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
-    /* ── Tiles section ── */
-    .tiles-section {
-      position: relative;
-      height: 1000vh;
-    }
-    .tiles-sticky {
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      overflow: hidden;
-      background: #f0ede8;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-    }
+    /* ── Tiles ── */
     .tile-card {
-      position: absolute;
+      position: fixed;
+      top: 50%;
+      left: 50%;
       width: min(380px, 78vw);
       aspect-ratio: 3/4;
       border-radius: 28px;
@@ -130,9 +117,9 @@
       flex-direction: column;
       justify-content: flex-end;
       will-change: transform, opacity;
-      transform-origin: center center;
       backface-visibility: hidden;
       overflow: hidden;
+      z-index: 0;
     }
     .tile-tag {
       font-family: 'Plus Jakarta Sans', sans-serif;
@@ -151,13 +138,14 @@
       letter-spacing: -0.03em;
     }
     .tiles-dots {
-      position: absolute;
+      position: fixed;
       bottom: 28px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
       gap: 7px;
       pointer-events: none;
+      z-index: 2;
     }
     .tiles-dot {
       width: 5px;
@@ -186,46 +174,38 @@
 
 <canvas id="c"></canvas>
 
-<!-- 300vh curtain scroll space — tiles start the moment curtain is fully open -->
-<div style="height:300vh"></div>
+<!-- Tile cards — fixed, behind curtain canvas (z:0 < canvas z:1) -->
+<!-- Curtain canvas is transparent where pulled away, revealing tiles beneath -->
+<div class="tile-card" style="background:#1c1c1c;color:#f0ede8;">
+  <span class="tile-tag">Brand Identity</span>
+  <h2 class="tile-title">Monolith<br>Studio</h2>
+</div>
+<div class="tile-card" style="background:#1e1528;color:#dfd6f5;">
+  <span class="tile-tag">Product Design</span>
+  <h2 class="tile-title">Vertex<br>App</h2>
+</div>
+<div class="tile-card" style="background:#0f2218;color:#d4eedb;">
+  <span class="tile-tag">Editorial</span>
+  <h2 class="tile-title">Current<br>Magazine</h2>
+</div>
+<div class="tile-card" style="background:#101827;color:#c8d8f0;">
+  <span class="tile-tag">Interface Design</span>
+  <h2 class="tile-title">Flux<br>Dashboard</h2>
+</div>
+<div class="tile-card" style="background:#231208;color:#f0d8c4;">
+  <span class="tile-tag">Type Design</span>
+  <h2 class="tile-title">Forma<br>Typeface</h2>
+</div>
+<div class="tile-card" style="background:#f0ede8;color:#1c1c1c;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;">
+  <span class="tile-tag" style="margin-bottom:0;color:#1c1c1c;">Available for work</span>
+  <h2 class="tile-title" style="font-size:clamp(28px,4vw,58px);">Let's make<br>something<br>remarkable</h2>
+</div>
 
-<!-- Tiles section — 1000vh gives 900vh of effective scroll, progress 0→1 -->
-<section class="tiles-section" id="tilesSection">
-  <div class="tiles-sticky" id="tilesSticky">
+<div class="tiles-dots" id="tilesDots"></div>
 
-    <div class="tile-card" style="background:#1c1c1c;color:#f0ede8;">
-      <span class="tile-tag">Brand Identity</span>
-      <h2 class="tile-title">Monolith<br>Studio</h2>
-    </div>
-
-    <div class="tile-card" style="background:#1e1528;color:#dfd6f5;">
-      <span class="tile-tag">Product Design</span>
-      <h2 class="tile-title">Vertex<br>App</h2>
-    </div>
-
-    <div class="tile-card" style="background:#0f2218;color:#d4eedb;">
-      <span class="tile-tag">Editorial</span>
-      <h2 class="tile-title">Current<br>Magazine</h2>
-    </div>
-
-    <div class="tile-card" style="background:#101827;color:#c8d8f0;">
-      <span class="tile-tag">Interface Design</span>
-      <h2 class="tile-title">Flux<br>Dashboard</h2>
-    </div>
-
-    <div class="tile-card" style="background:#231208;color:#f0d8c4;">
-      <span class="tile-tag">Type Design</span>
-      <h2 class="tile-title">Forma<br>Typeface</h2>
-    </div>
-
-    <div class="tile-card" style="background:#f0ede8;color:#1c1c1c;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;">
-      <span class="tile-tag" style="margin-bottom:0;color:#1c1c1c;">Available for work</span>
-      <h2 class="tile-title" style="font-size:clamp(28px,4vw,58px);">Let's make<br>something<br>remarkable</h2>
-    </div>
-
-    <div class="tiles-dots" id="tilesDots"></div>
-  </div>
-</section>
+<!-- Scroll space: 1200vh gives tiles progress 0→1 over full scroll -->
+<!-- At scrollY=300vh curtain is fully open AND first tile is at center (progress=0.25) -->
+<div style="height:1200vh"></div>
 
 <script>
 // ─── Word-mask split ─────────────────────────────────
@@ -640,7 +620,6 @@ function interpolate(p, inputs, outputs) {
   return outputs[outputs.length - 1];
 }
 
-const tilesSection = document.getElementById('tilesSection');
 const tileCards    = Array.from(document.querySelectorAll('.tile-card'));
 const tilesDots    = document.getElementById('tilesDots');
 const TOTAL_ITEMS  = tileCards.length;
@@ -654,9 +633,8 @@ tileCards.forEach(() => {
 const dotEls = Array.from(tilesDots.querySelectorAll('.tiles-dot'));
 
 function updateTiles() {
-  const rect     = tilesSection.getBoundingClientRect();
-  const scrolled = -rect.top;
-  const progress = Math.max(0, Math.min(1, scrolled / (9 * innerHeight)));
+  // progress 0→1 over 1200vh; at scrollY=300vh (curtain done) progress=0.25 = tile 0 center
+  const progress = Math.max(0, Math.min(1, window.scrollY / (12 * innerHeight)));
 
   const step    = 0.75 / TOTAL_ITEMS;
   const isLarge = innerWidth >= 1440;
@@ -695,7 +673,7 @@ function updateTiles() {
       }
     }
 
-    card.style.transform = `translateX(${tx}vw) scale(${scale})`;
+    card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
     card.style.opacity   = opacity;
     card.style.zIndex    = Math.round(scale * 100);
 
