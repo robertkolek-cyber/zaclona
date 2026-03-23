@@ -479,8 +479,9 @@ function precomputeRow(ny) {
     const rowPull = curtainPull * (1 - ny2) + bottomPull * ny2;
     // Horizontal cascade from foldPull[i], blended with row vertical lag
     const effectivePull = foldPull[i] * (1 - ny2) + rowPull * ny2;
-    const compress = 1.0 - effectivePull * 0.85;
-    fx = fx * compress;
+    // Slide folds off-screen left (gathered), staggered per fold
+    const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
+    fx = fx * (1 - effectivePull) + gatheredX * effectivePull;
 
     const blend = Math.pow(ny, 0.7);
     let sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
