@@ -533,22 +533,24 @@ function alignLockup() {
 }
 
 function updateText(dt) {
-  // Text tracks where the curtain visually is, not raw scroll
-  const textX = visualPull * -55;
-  tile.style.transform = `translate(${textX}vw, -50%)`;
+  // Anchor text RIGHT edge to curtain right edge — last word always on curtain
+  const edgePx    = curtainEdgeFrac * innerWidth;
+  const rightPx   = Math.max(0, innerWidth - edgePx + 24);
+  tile.style.left      = 'auto';
+  tile.style.right     = rightPx + 'px';
+  tile.style.transform = 'translateY(-50%)';
+  tile.style.webkitMaskImage = 'none';
+  tile.style.maskImage       = 'none';
+
   alignLockup();
+
   const rawOpacity = 1 - (visualPull - 0.1) / (0.62 - 0.1);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
   tile.style.opacity = opacity;
   if (visualPull > 0.35) nameLockup.style.opacity = opacity;
 
-  // Mask text to curtain edge — fade out anything right of the curtain
-  const edgePct   = curtainEdgeFrac * 100;
-  const maskGrad  = `linear-gradient(to right, black ${edgePct - 2}%, transparent ${edgePct + 1}%)`;
-  tile.style.webkitMaskImage = maskGrad;
-  tile.style.maskImage       = maskGrad;
-  nameLockup.style.webkitMaskImage = maskGrad;
-  nameLockup.style.maskImage       = maskGrad;
+  nameLockup.style.webkitMaskImage = 'none';
+  nameLockup.style.maskImage       = 'none';
 
   // Staggered blur-reveal — each card clears as the curtain sweeps past
   const cards    = usecases.querySelectorAll('.uc-card');
