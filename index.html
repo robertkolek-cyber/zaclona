@@ -121,13 +121,14 @@
     .uc-card {
       flex: 1;
       max-width: 340px;
-      border: 1px solid rgba(0,0,0,0.12);
+      border: 1px solid rgba(180,140,110,0.18);
       border-radius: 4px;
       padding: clamp(20px, 2.5vw, 36px);
-      background: #fff;
+      background: #fdf6f0;
       opacity: 0;
       transform: translateY(18px);
-      will-change: opacity, transform;
+      filter: blur(8px);
+      will-change: opacity, transform, filter;
     }
 
     .uc-card h2 {
@@ -367,6 +368,7 @@ function updateText() {
     const t = Math.max(0, Math.min(1, (curtainPull - starts[i]) / range));
     card.style.opacity   = t;
     card.style.transform = `translateY(${(1 - t) * 18}px)`;
+    card.style.filter    = `blur(${(1 - t) * 8}px)`;
     if (t > 0) anyVisible = true;
   });
   usecases.style.opacity = 1;
