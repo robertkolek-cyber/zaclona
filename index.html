@@ -403,12 +403,11 @@ function updateMouseWind(dt) {
     const accel = -11 * mouseDisp[i] - 3.5 * mouseDispVel[i] + force + coupling;
     mouseDispVel[i] += accel * dt;
     mouseDisp[i]    += mouseDispVel[i] * dt;
-    mouseDisp[i]     = Math.max(-0.10, Math.min(0.10, mouseDisp[i]));
+    mouseDisp[i]     = Math.max(-0.055, Math.min(0.055, mouseDisp[i]));
   }
 
-  // Spatial blur — eliminates peaked "mountain" shape, makes displacement wave-like
-  // Same technique as swingSmooth: bi-directional passes
-  for (let pass = 0; pass < 4; pass++) {
+  // Spatial blur — smooth out any remaining peaks so adjacent folds never crease
+  for (let pass = 0; pass < 7; pass++) {
     for (let i = 1; i < NUM_FOLDS - 1; i++)
       mouseDisp[i] = mouseDisp[i] * 0.5 + (mouseDisp[i-1] + mouseDisp[i+1]) * 0.25;
     for (let i = NUM_FOLDS - 2; i > 0; i--)
@@ -454,9 +453,11 @@ function precomputeRow(ny) {
     const f = FOLDS[i];
     let fx = f.relPos + swingSmooth[i] * totalHang;
 
-    // Mouse wind — whole curtain responds, bottom swings more (natural hang)
+    // Mouse wind — epicentre at cursor, soft falloff to ~35% at far edge, bottom hangs more
     if (mouseNX >= 0) {
-      fx += mouseDisp[i] * (0.1 + totalHang * 0.9);
+      const dx = FOLDS[i].relPos - mouseNX;
+      const proximity = 0.35 + 0.65 * Math.exp(-dx * dx / 0.28);
+      fx += mouseDisp[i] * proximity * (0.1 + totalHang * 0.9);
     }
 
     const pull = foldPull[i] * dragLag;
