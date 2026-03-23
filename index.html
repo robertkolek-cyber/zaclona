@@ -36,14 +36,14 @@
       position: absolute;
       top: 0; left: 0;
       font-family: 'Instrument Serif', serif;
-      font-size: clamp(26px, 4.2vw, 48px);
+      font-size: clamp(18px, 2.2vw, 30px);
       font-weight: 400;
       color: #1a1a2e;
       line-height: 1.18;
       letter-spacing: -0.01em;
       transition: opacity 0.45s ease;
       text-shadow: 0 1px 0 rgba(255,255,255,0.25);
-      white-space: normal;
+      white-space: nowrap;
     }
     .headline-normal { font-style: normal; opacity: 1; }
     .headline-italic  { font-style: italic;  opacity: 0; }
@@ -58,47 +58,18 @@
       text-shadow: 0 1px 0 rgba(255,255,255,0.25);
     }
 
-    .scroll-indicator {
-      position: fixed;
-      bottom: 48px;
-      left: 38%;
-      transform: translateX(-50%);
-      z-index: 2;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      pointer-events: none;
-      will-change: transform, opacity;
-      transition: opacity 0.4s ease;
-    }
-    .scroll-line {
-      width: 1px;
-      height: 40px;
-      background: #1a1a2e;
-      transform-origin: top center;
-      animation: scroll-pulse 1.8s ease-in-out infinite;
-    }
-    @keyframes scroll-pulse {
-      0%   { transform: scaleY(0); opacity: 0; }
-      30%  { opacity: 0.5; }
-      70%  { transform: scaleY(1); opacity: 0.5; }
-      100% { transform: scaleY(1); opacity: 0; }
-    }
   </style>
 </head>
 <body>
 
 <div class="project-tile" id="tile">
   <div class="headline-wrap">
-    <h1 class="headline-normal" id="hn">Design starts where the surface ends.</h1>
-    <h1 class="headline-italic"  id="hi">Design starts where the surface ends.</h1>
+    <h1 class="headline-normal" id="hn">The real design is always underneath</h1>
+    <h1 class="headline-italic"  id="hi">The real design is always underneath</h1>
   </div>
-  <p>scroll to see what's underneath</p>
+  <p>scroll to explore</p>
 </div>
 
-<div class="scroll-indicator" id="scrollIndicator">
-  <div class="scroll-line"></div>
-</div>
 
 <canvas id="c"></canvas>
 <script>
@@ -112,7 +83,7 @@ const SCALE = 4;
 const tile           = document.getElementById('tile');
 const headlineNormal = document.getElementById('hn');
 const headlineItalic = document.getElementById('hi');
-const scrollIndicator = document.getElementById('scrollIndicator');
+
 
 function resize() {
   canvas.width  = innerWidth;
@@ -251,15 +222,10 @@ function updateText() {
   // Translate text with the curtain — slightly faster for parallax
   const textX = curtainPull * -55;
   tile.style.transform          = `translate(calc(-50% + ${textX}vw), -50%)`;
-  scrollIndicator.style.transform = `translateX(calc(-50% + ${textX}vw))`;
-
   // Fade out between 35%–62% of pull
   const rawOpacity = 1 - (curtainPull - 0.35) / (0.62 - 0.35);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
   tile.style.opacity = opacity;
-
-  // Hide scroll indicator as soon as scrolling starts
-  scrollIndicator.style.opacity = curtainPull > 0.08 ? '0' : '1';
 
   // Italic cross-fade: switch when curtainVel is meaningful
   const isMoving = Math.abs(curtainVel) > 0.04;
