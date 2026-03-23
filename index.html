@@ -111,7 +111,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: clamp(16px, 2.5vw, 40px);
+      gap: clamp(14px, 2vw, 32px);
       padding: 0 clamp(24px, 5vw, 80px);
       z-index: 2;
       pointer-events: none;
@@ -120,34 +120,81 @@
 
     .uc-card {
       flex: 1;
-      max-width: 340px;
-      border: none;
-      border-radius: 20px;
-      padding: clamp(24px, 2.8vw, 42px);
-      background: #fff;
-      box-shadow: 0 6px 32px rgba(160,120,90,0.13), 0 1px 6px rgba(160,120,90,0.08);
+      max-width: 320px;
+      border-radius: 24px;
+      padding: clamp(28px, 3vw, 48px) clamp(24px, 2.6vw, 42px);
+      background: #fffdf9;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.95),
+        0 0 0 1px rgba(160,120,90,0.07),
+        0 2px 4px rgba(120,80,50,0.06),
+        0 8px 28px rgba(140,100,70,0.10),
+        0 28px 72px rgba(140,100,70,0.08);
       opacity: 0;
       transform: translateY(18px);
       filter: blur(8px);
       will-change: opacity, transform, filter;
+      transition: transform 0.4s cubic-bezier(0.16,1,0.3,1),
+                  box-shadow 0.4s cubic-bezier(0.16,1,0.3,1);
+      cursor: default;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .uc-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(165deg, rgba(255,255,255,0.45) 0%, transparent 45%);
+      pointer-events: none;
+    }
+
+    .uc-card[data-hovered] {
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.95),
+        0 0 0 1px rgba(160,120,90,0.09),
+        0 4px 8px rgba(120,80,50,0.07),
+        0 16px 40px rgba(140,100,70,0.14),
+        0 40px 90px rgba(140,100,70,0.10);
+    }
+
+    .uc-num {
+      display: block;
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.13em;
+      color: rgba(160,120,90,0.50);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .uc-line {
+      width: 28px;
+      height: 1.5px;
+      background: linear-gradient(to right, rgba(160,120,90,0.30), rgba(160,120,90,0.05));
+      border-radius: 2px;
+      margin-bottom: 20px;
     }
 
     .uc-card h2 {
       font-family: 'Instrument Sans', sans-serif;
-      font-size: clamp(16px, 1.6vw, 22px);
+      font-size: clamp(17px, 1.7vw, 24px);
       font-weight: 600;
-      letter-spacing: -0.02em;
-      color: #111;
-      margin-bottom: 10px;
+      letter-spacing: -0.025em;
+      color: #1a1410;
+      margin-bottom: 12px;
+      line-height: 1.2;
     }
 
     .uc-card p {
       font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: clamp(11px, 1vw, 14px);
+      font-size: clamp(11px, 0.95vw, 13.5px);
       font-weight: 500;
-      color: #666;
-      line-height: 1.55;
-      letter-spacing: 0;
+      color: rgba(80,60,45,0.60);
+      line-height: 1.65;
+      letter-spacing: 0.005em;
       text-transform: none;
       text-align: left;
       opacity: 1;
@@ -162,14 +209,20 @@
 
 <div class="usecases" id="usecases">
   <div class="uc-card">
+    <span class="uc-num">01</span>
+    <div class="uc-line"></div>
     <h2>Brand Identity</h2>
     <p>Visual systems and identity design for startups and established companies.</p>
   </div>
   <div class="uc-card">
+    <span class="uc-num">02</span>
+    <div class="uc-line"></div>
     <h2>Product Design</h2>
     <p>End-to-end UX and interface design from concept to shipping product.</p>
   </div>
   <div class="uc-card">
+    <span class="uc-num">03</span>
+    <div class="uc-line"></div>
     <h2>Motion & Web</h2>
     <p>Interactive experiences and motion work that bring interfaces to life.</p>
   </div>
@@ -201,6 +254,31 @@
     `<span class="word"><span class="wi" style="animation-delay:${2000 + i * 110}ms">${w}</span></span>`
   ).join(' ');
 })();
+
+// ─── Card hover lift ─────────────────────────────────
+document.querySelectorAll('.uc-card').forEach(card => {
+  card._hoverY = 0;
+  card._hoverVel = 0;
+  card._hoverTarget = 0;
+  card.addEventListener('mouseenter', () => {
+    card._hoverTarget = -5;
+    card.setAttribute('data-hovered', '');
+  });
+  card.addEventListener('mouseleave', () => {
+    card._hoverTarget = 0;
+    card.removeAttribute('data-hovered');
+  });
+});
+
+// Spring-animate hover offsets each frame
+function updateCardHover(dt) {
+  document.querySelectorAll('.uc-card').forEach(card => {
+    const k = 14, d = 5.5;
+    const accel = k * (card._hoverTarget - card._hoverY) - d * card._hoverVel;
+    card._hoverVel += accel * dt;
+    card._hoverY   += card._hoverVel * dt;
+  });
+}
 
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
@@ -367,8 +445,9 @@ function updateText() {
   let anyVisible = false;
   cards.forEach((card, i) => {
     const t = Math.max(0, Math.min(1, (curtainPull - starts[i]) / range));
+    const hoverY = card._hoverY || 0;
     card.style.opacity   = t;
-    card.style.transform = `translateY(${(1 - t) * 18}px)`;
+    card.style.transform = `translateY(${(1 - t) * 18 + hoverY}px)`;
     card.style.filter    = `blur(${(1 - t) * 8}px)`;
     if (t > 0) anyVisible = true;
   });
@@ -395,6 +474,7 @@ function draw(ms) {
 
   computeSwings(t);
   updateFoldPull(dt);
+  updateCardHover(dt);
   updateText();
 
   for (let y = 0; y < SH; y++) {
