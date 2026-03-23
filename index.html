@@ -534,19 +534,29 @@ function alignLockup() {
 
 let tileInitialRight = null;
 let tileInitialEdge  = null;
+let textRight        = null; // smoothed text right edge (px)
 
 function updateText(dt) {
   // Capture initial anchor once — before any JS moves the tile
   if (tileInitialRight === null) {
     tileInitialRight = tile.getBoundingClientRect().right;
     tileInitialEdge  = curtainEdgeFrac;
+    textRight        = tileInitialRight;
   }
 
-  // Move text right edge exactly as the curtain edge moves
+  // Target: where text wants to be (lagging behind curtain)
   const curtainShift = (curtainEdgeFrac - tileInitialEdge) * innerWidth;
-  const newRight = tileInitialRight + curtainShift;
+  const targetRight  = tileInitialRight + curtainShift;
+
+  // Drift toward target with lag — wiggle room
+  textRight += (targetRight - textRight) * Math.min(1, dt * 4.5);
+
+  // Hard clamp: never extend past the curtain edge
+  const curtainEdgePx = curtainEdgeFrac * innerWidth;
+  const clampedRight  = Math.min(textRight, curtainEdgePx);
+
   tile.style.left      = 'auto';
-  tile.style.right     = Math.max(0, innerWidth - newRight) + 'px';
+  tile.style.right     = Math.max(0, innerWidth - clampedRight) + 'px';
   tile.style.transform = 'translateY(-50%)';
   tile.style.webkitMaskImage = 'none';
   tile.style.maskImage       = 'none';
