@@ -541,6 +541,20 @@ function updateText(dt) {
   tile.style.opacity = opacity;
   if (visualPull > 0.35) nameLockup.style.opacity = opacity;
 
+  // Clip text to curtain's right edge so it never peeks out
+  const curtainEdgePx = (1.0 - visualPull * 1.12) * innerWidth;
+  function clipEl(el) {
+    const r = el.getBoundingClientRect();
+    const overflow = r.right - curtainEdgePx;
+    if (overflow > 0) {
+      el.style.clipPath = `inset(0 ${overflow}px 0 0)`;
+    } else {
+      el.style.clipPath = 'none';
+    }
+  }
+  clipEl(tile);
+  clipEl(nameLockup);
+
   // Staggered blur-reveal — each card clears as the curtain sweeps past
   const cards    = usecases.querySelectorAll('.uc-card');
   const triggers = [0.62, 0.44, 0.27];  // right → middle → left
