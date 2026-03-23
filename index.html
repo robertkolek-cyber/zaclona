@@ -15,36 +15,91 @@
 
     .project-tile {
       position: fixed;
-      top: 50%; left: 50%;
+      top: 42%;
+      left: 38%;
       transform: translate(-50%, -50%);
       z-index: 2;
-      text-align: center;
+      text-align: left;
+      max-width: 480px;
+      pointer-events: none;
+      will-change: transform, opacity;
     }
-    .project-tile h1 {
+
+    .headline-wrap {
+      position: relative;
+      min-height: clamp(34px, 6vw, 58px);
+      margin-bottom: 18px;
+    }
+
+    .headline-normal,
+    .headline-italic {
+      position: absolute;
+      top: 0; left: 0;
       font-family: 'Instrument Serif', serif;
-      font-size: clamp(28px, 5vw, 48px);
+      font-size: clamp(26px, 4.2vw, 48px);
       font-weight: 400;
-      font-style: italic;
       color: #1a1a2e;
-      margin-bottom: 14px;
-      line-height: 1.15;
+      line-height: 1.18;
       letter-spacing: -0.01em;
+      transition: opacity 0.45s ease;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+      white-space: normal;
     }
+    .headline-normal { font-style: normal; opacity: 1; }
+    .headline-italic  { font-style: italic;  opacity: 0; }
+
     .project-tile p {
       font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 500;
-      color: #888;
-      letter-spacing: 0.06em;
+      color: #6a6a7e;
+      letter-spacing: 0.09em;
       text-transform: uppercase;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+    }
+
+    .scroll-indicator {
+      position: fixed;
+      bottom: 48px;
+      left: 38%;
+      transform: translateX(-50%);
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+      will-change: transform, opacity;
+      transition: opacity 0.4s ease;
+    }
+    .scroll-line {
+      width: 1px;
+      height: 40px;
+      background: #1a1a2e;
+      transform-origin: top center;
+      animation: scroll-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes scroll-pulse {
+      0%   { transform: scaleY(0); opacity: 0; }
+      30%  { opacity: 0.5; }
+      70%  { transform: scaleY(1); opacity: 0.5; }
+      100% { transform: scaleY(1); opacity: 0; }
     }
   </style>
 </head>
 <body>
-<div class="project-tile">
-  <h1>Design starts where the surface ends.</h1>
+
+<div class="project-tile" id="tile">
+  <div class="headline-wrap">
+    <h1 class="headline-normal" id="hn">Design starts where the surface ends.</h1>
+    <h1 class="headline-italic"  id="hi">Design starts where the surface ends.</h1>
+  </div>
   <p>scroll to see what's underneath</p>
 </div>
+
+<div class="scroll-indicator" id="scrollIndicator">
+  <div class="scroll-line"></div>
+</div>
+
 <canvas id="c"></canvas>
 <script>
 const canvas = document.getElementById('c');
@@ -53,6 +108,11 @@ const ctx    = canvas.getContext('2d');
 const small = document.createElement('canvas');
 const sctx  = small.getContext('2d');
 const SCALE = 4;
+
+const tile           = document.getElementById('tile');
+const headlineNormal = document.getElementById('hn');
+const headlineItalic = document.getElementById('hi');
+const scrollIndicator = document.getElementById('scrollIndicator');
 
 function resize() {
   canvas.width  = innerWidth;
@@ -64,8 +124,6 @@ window.addEventListener('resize', resize);
 resize();
 
 // ─── Scroll state with inertia ───────────────────────
-// scrollPull = target from scroll position (0..1)
-// curtainPull = smoothed value that chases scrollPull with spring physics
 let scrollPull  = 0;
 let curtainPull = 0;
 let curtainVel  = 0;
@@ -118,17 +176,13 @@ function computeSwings(t) {
   }
 }
 
-// ─── Per-row precompute (now with curtain pull) ──────
+// ─── Per-row precompute ───────────────────────────────
 const ROW_DATA = new Float32Array(NUM_FOLDS * 2);
 
-// Per-fold pull state — each fold has its own smoothed pull
-// Right folds move first (they're pulled off the rod first),
-// left folds follow with delay (fabric cascades)
 const foldPull     = new Float32Array(NUM_FOLDS);
 const foldPullVel  = new Float32Array(NUM_FOLDS);
 
 function updateFoldPull(dt) {
-  // Spring physics for the main curtainPull chasing scrollPull
   const pullSpringK = 8.0;
   const pullDamping = 4.5;
   const pullAccel = pullSpringK * (scrollPull - curtainPull) - pullDamping * curtainVel;
@@ -136,18 +190,9 @@ function updateFoldPull(dt) {
   curtainPull += curtainVel * dt;
   curtainPull  = Math.max(0, Math.min(1.0, curtainPull));
 
-  // Each fold chases curtainPull but with cascading delay:
-  // Right folds respond first, left folds lag behind.
-  // This creates the "peeling" effect like pulling a real curtain.
   for (let i = 0; i < NUM_FOLDS; i++) {
-    // How quickly this fold responds — rightmost = fastest
     const foldNX = FOLDS[i].relPos;
-    // Right folds (nx~1) respond immediately, left folds (nx~0) lag
-    // Exponential mapping so the cascade feels organic
     const responsiveness = 0.3 + foldNX * foldNX * 12.0;
-
-    // Each fold's target: once curtainPull passes this fold's position,
-    // it starts gathering. Rightmost folds start gathering first.
     const foldThreshold = (1.0 - foldNX) * 0.7;
     const foldTarget = Math.max(0, (curtainPull - foldThreshold) / (1.0 - foldThreshold));
     const clampedTarget = Math.min(1, foldTarget);
@@ -163,30 +208,19 @@ function precomputeRow(ny) {
   const hang = Math.pow(ny, 0.50);
   const extraLoose = ny > 0.7 ? (ny - 0.7) / 0.3 : 0;
   const totalHang  = hang + extraLoose * 0.4;
-
-  // Bottom of curtain drags behind top when being pulled
-  // ny=0 (top) moves at full pull speed, ny=1 (bottom) lags slightly
   const dragLag = 1.0 - ny * ny * 0.18;
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     const f = FOLDS[i];
-
-    // Base position with breeze
     let fx = f.relPos + swingSmooth[i] * totalHang;
 
-    // Apply curtain pull: fold gathers toward left edge
-    // The pull compresses folds together and shifts them left
     const pull = foldPull[i] * dragLag;
-
-    // Gathered position: folds compress off-screen to the left.
-    // Push far enough that even the bottom (dragLag=0.65) clears the edge.
     const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
     fx = fx * (1 - pull) + gatheredX * pull;
 
-    // Folds get tighter (narrower sigma) as they bunch up
     const blend = Math.pow(ny, 0.7);
     let sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
-    sigma *= 1.0 - pull * 0.5;  // compress fold width when gathered
+    sigma *= 1.0 - pull * 0.5;
 
     ROW_DATA[i * 2]     = fx;
     ROW_DATA[i * 2 + 1] = sigma * sigma;
@@ -210,6 +244,32 @@ function lightAt(nx) {
   return light;
 }
 
+// ─── Text animation state ─────────────────────────────
+let prevIsMoving = false;
+
+function updateText() {
+  // Translate text with the curtain — slightly faster for parallax
+  const textX = curtainPull * -55;
+  tile.style.transform          = `translate(calc(-50% + ${textX}vw), -50%)`;
+  scrollIndicator.style.transform = `translateX(calc(-50% + ${textX}vw))`;
+
+  // Fade out between 35%–62% of pull
+  const rawOpacity = 1 - (curtainPull - 0.35) / (0.62 - 0.35);
+  const opacity = Math.max(0, Math.min(1, rawOpacity));
+  tile.style.opacity = opacity;
+
+  // Hide scroll indicator as soon as scrolling starts
+  scrollIndicator.style.opacity = curtainPull > 0.08 ? '0' : '1';
+
+  // Italic cross-fade: switch when curtainVel is meaningful
+  const isMoving = Math.abs(curtainVel) > 0.04;
+  if (isMoving !== prevIsMoving) {
+    headlineNormal.style.opacity = isMoving ? '0' : '1';
+    headlineItalic.style.opacity = isMoving ? '1' : '0';
+    prevIsMoving = isMoving;
+  }
+}
+
 // ─── Draw loop ───────────────────────────────────────
 let imgCache  = null;
 let lastFrame = 0;
@@ -229,6 +289,7 @@ function draw(ms) {
 
   computeSwings(t);
   updateFoldPull(dt);
+  updateText();
 
   for (let y = 0; y < SH; y++) {
     const ny = y / SH;
@@ -251,8 +312,7 @@ function draw(ms) {
       const g = Math.min(255, Math.round(65 + l * 190  + peach * 30));
       const b = Math.min(255, Math.round(105 + l * 150 - peach * 22));
 
-      // Alpha: find the rightmost fold in this row.
-      // Pixels beyond that edge are transparent (no fabric there).
+      // Alpha: track rightmost fold edge per row
       let maxFoldX = -999;
       for (let fi = 0; fi < NUM_FOLDS; fi++) {
         const fx = ROW_DATA[fi * 2];
@@ -260,7 +320,6 @@ function draw(ms) {
         const edgeX = fx + Math.sqrt(s2) * 3.0;
         if (edgeX > maxFoldX) maxFoldX = edgeX;
       }
-      // Soft edge: fade over ~3% of screen width beyond the rightmost fold
       const edgeFade = Math.max(0, Math.min(1, (maxFoldX - nx) / 0.03));
       const alpha = Math.round(edgeFade * 255);
 
