@@ -403,7 +403,7 @@ function updateMouseWind(dt) {
     const accel = -11 * mouseDisp[i] - 3.5 * mouseDispVel[i] + force + coupling;
     mouseDispVel[i] += accel * dt;
     mouseDisp[i]    += mouseDispVel[i] * dt;
-    mouseDisp[i]     = Math.max(-0.075, Math.min(0.075, mouseDisp[i]));
+    mouseDisp[i]     = Math.max(-0.055, Math.min(0.055, mouseDisp[i]));
   }
 
   // Spatial blur — smooth out any remaining peaks so adjacent folds never crease
@@ -473,7 +473,7 @@ function precomputeRow(ny) {
       const dx = FOLDS[i].relPos - mouseNX;
       const proximity = 0.35 + 0.65 * Math.exp(-dx * dx / 0.28);
       const swell = Math.abs(mouseDisp[i]) * proximity * (0.4 + totalHang * 0.6);
-      sigma *= 1.0 + swell * 26.0;
+      sigma *= 1.0 + swell * 14.0;
     }
 
     ROW_DATA[i * 2]     = fx;
