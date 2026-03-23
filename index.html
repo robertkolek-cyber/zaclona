@@ -82,9 +82,42 @@
       animation: sub-in 1.0s cubic-bezier(0.16, 1, 0.3, 1) 1.6s forwards;
     }
 
+    .name-lockup {
+      position: fixed;
+      top: 36px;
+      left: 40px;
+      z-index: 2;
+      pointer-events: none;
+      mix-blend-mode: difference;
+      opacity: 0;
+      animation: sub-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+    }
+    .name-lockup span {
+      display: block;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 500;
+      color: #fff;
+      letter-spacing: 0.04em;
+    }
+    .name-lockup .label {
+      font-size: clamp(9px, 0.9vw, 11px);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      opacity: 0.6;
+      margin-bottom: 3px;
+    }
+    .name-lockup .name {
+      font-size: clamp(13px, 1.2vw, 16px);
+    }
+
   </style>
 </head>
 <body>
+
+<div class="name-lockup">
+  <span class="label">Portfolio of</span>
+  <span class="name">Robert Kolek</span>
+</div>
 
 <div class="project-tile" id="tile">
   <h1>The real design is always underneath</h1>
