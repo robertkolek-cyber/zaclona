@@ -355,8 +355,9 @@ const swingRaw    = new Float32Array(NUM_FOLDS);
 const swingSmooth = new Float32Array(NUM_FOLDS);
 
 function computeSwings(t) {
+  const swell = 1.0 + windStr * 1.4; // whole curtain breathes more in a gust
   for (let i = 0; i < NUM_FOLDS; i++) {
-    swingRaw[i] = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight;
+    swingRaw[i] = baseSwing(t, FOLDS[i].phase) * FOLDS[i].weight * swell;
   }
   for (let pass = 0; pass < 3; pass++) {
     const src = pass === 0 ? swingRaw : swingSmooth;
@@ -370,16 +371,21 @@ function computeSwings(t) {
 
 // ─── Mouse breeze ────────────────────────────────────
 let mouseNX = -1, mouseNY = -1;
-let gustEnergy = 0;   // 0..1 — how lively the current breeze is
-let breezePhase = 0;  // randomised per gust for organic variety
+let windCX  = 0.5;  // center of wind packet (horizontal)
+let windDir = 0;    // +1 right / -1 left
+let windStr = 0;    // strength 0..1, decays over time
 
 document.addEventListener('mousemove', (e) => {
   const nx = e.clientX / innerWidth;
   const ny = e.clientY / innerHeight;
   if (mouseNX >= 0) {
-    const speed = Math.hypot(nx - mouseNX, (ny - mouseNY) * 0.5);
-    gustEnergy = Math.min(1.0, gustEnergy + speed * 5.0);
-    if (speed > 0.004) breezePhase = Math.random() * Math.PI * 2;
+    const dx = nx - mouseNX;
+    const speed = Math.abs(dx) + Math.abs(ny - mouseNY) * 0.4;
+    if (speed > 0.003) {
+      windCX  = nx;
+      windDir = dx > 0 ? 1 : -1;
+      windStr = Math.min(1.0, windStr + speed * 7.0);
+    }
   }
   mouseNX = nx;
   mouseNY = ny;
@@ -387,9 +393,8 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseleave', () => { mouseNX = -1; mouseNY = -1; });
 
 function updateMouseWind(dt) {
-  // Breeze lingers and fades — not a snap-off
-  gustEnergy *= Math.pow(0.18, dt);
-  if (gustEnergy < 0.002) gustEnergy = 0;
+  windStr *= Math.pow(0.12, dt); // fades in ~2-3s
+  if (windStr < 0.002) windStr = 0;
 }
 
 // ─── Per-row precompute ───────────────────────────────
@@ -444,10 +449,11 @@ function precomputeRow(ny, t) {
     const f = FOLDS[i];
     let fx = f.relPos + swingSmooth[i] * totalHang;
 
-    // Mouse breeze — wave grows from gust energy, each fold has its own phase
-    if (gustEnergy > 0.002) {
-      const wave = Math.sin(t * 1.5 + f.phase * 1.3 + breezePhase) * gustEnergy * 0.052;
-      fx += wave * (0.08 + totalHang * 0.92);
+    // Mouse breeze — gaussian push at wind center, travels in mouse direction
+    if (windStr > 0.002) {
+      const dx = f.relPos - windCX;
+      const envelope = Math.exp(-dx * dx / 0.07);
+      fx += windDir * windStr * 0.05 * envelope * (0.1 + totalHang * 0.9);
     }
 
     // Vertical row pull: top tracks curtainPull, bottom lags via bottomPull
@@ -462,9 +468,11 @@ function precomputeRow(ny, t) {
     const blend = Math.pow(ny, 0.7);
     let sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
 
-    // Sigma swell — whole curtain opens up slightly in the breeze
-    if (gustEnergy > 0.002) {
-      sigma *= 1.0 + gustEnergy * 0.38;
+    // Sigma swell — folds open where the wind packet hits
+    if (windStr > 0.002) {
+      const dx = f.relPos - windCX;
+      const envelope = Math.exp(-dx * dx / 0.07);
+      sigma *= 1.0 + envelope * windStr * 0.30;
     }
 
     ROW_DATA[i * 2]     = fx;
