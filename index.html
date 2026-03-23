@@ -433,7 +433,7 @@ function updateFoldPull(dt) {
   for (let i = 0; i < NUM_FOLDS; i++) {
     const foldNX = FOLDS[i].relPos;
     const responsiveness = 0.3 + foldNX * foldNX * 12.0;
-    const foldThreshold = (1.0 - foldNX) * 0.7;
+    const foldThreshold = (1.0 - foldNX) * 0.1;
     const foldTarget = Math.max(0, (curtainPull - foldThreshold) / (1.0 - foldThreshold));
     const clampedTarget = Math.min(1, foldTarget);
 
