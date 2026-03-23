@@ -255,11 +255,18 @@
   ).join(' ');
 })();
 
-// ─── Card hover lift ─────────────────────────────────
+// ─── Card springs (reveal + hover) ───────────────────
 document.querySelectorAll('.uc-card').forEach(card => {
-  card._hoverY = 0;
+  // reveal spring
+  card._sPos     = 0;   // 0 → 1
+  card._sVel     = 0;
+  card._sFired   = false;
+
+  // hover spring
+  card._hoverY   = 0;
   card._hoverVel = 0;
   card._hoverTarget = 0;
+
   card.addEventListener('mouseenter', () => {
     card._hoverTarget = -5;
     card.setAttribute('data-hovered', '');
@@ -270,12 +277,13 @@ document.querySelectorAll('.uc-card').forEach(card => {
   });
 });
 
-// Spring-animate hover offsets each frame
+// Spring-animate all card states each frame
 function updateCardHover(dt) {
   document.querySelectorAll('.uc-card').forEach(card => {
-    const k = 14, d = 5.5;
-    const accel = k * (card._hoverTarget - card._hoverY) - d * card._hoverVel;
-    card._hoverVel += accel * dt;
+    // hover spring
+    const hk = 14, hd = 5.5;
+    const hAccel = hk * (card._hoverTarget - card._hoverY) - hd * card._hoverVel;
+    card._hoverVel += hAccel * dt;
     card._hoverY   += card._hoverVel * dt;
   });
 }
@@ -429,7 +437,7 @@ function alignLockup() {
   nameLockup.style.left = rect.left + 'px';
 }
 
-function updateText() {
+function updateText(dt) {
   const textX = curtainPull * -55;
   tile.style.transform = `translate(${textX}vw, -50%)`;
   alignLockup();
@@ -438,18 +446,35 @@ function updateText() {
   tile.style.opacity = opacity;
   if (curtainPull > 0.35) nameLockup.style.opacity = opacity;
 
-  // Staggered reveal — each card starts as the curtain sweeps past its column
-  const cards = usecases.querySelectorAll('.uc-card');
-  const starts = [0.60, 0.42, 0.25];   // right card first, then middle, then left
-  const range  = 0.12;                  // how much pull it takes to go 0→1 opacity
+  // Staggered spring reveal — fire each card's spring when curtain sweeps past
+  const cards   = usecases.querySelectorAll('.uc-card');
+  const triggers = [0.62, 0.44, 0.27];  // right → middle → left
+  const SK = 220, SD = 16;               // stiff + slightly underdamped → nice overshoot
   let anyVisible = false;
+
   cards.forEach((card, i) => {
-    const t = Math.max(0, Math.min(1, (curtainPull - starts[i]) / range));
-    const hoverY = card._hoverY || 0;
-    card.style.opacity   = t;
-    card.style.transform = `translateY(${(1 - t) * 18 + hoverY}px)`;
-    card.style.filter    = `blur(${(1 - t) * 8}px)`;
-    if (t > 0) anyVisible = true;
+    // Fire spring once threshold is crossed
+    if (!card._sFired && curtainPull >= triggers[i]) {
+      card._sFired = true;
+      card._sVel   = 8;   // initial kick for snappier launch
+    }
+
+    // Integrate reveal spring toward 1
+    if (card._sFired && card._sPos < 1.5) {
+      const accel = SK * (1 - card._sPos) - SD * card._sVel;
+      card._sVel += accel * dt;
+      card._sPos += card._sVel * dt;
+    }
+
+    const s  = card._sPos;
+    const opacity = Math.max(0, Math.min(1, s * 2.5));   // snaps opaque fast
+    const scl = s <= 0 ? 0.84 : Math.max(0.84, 0.84 + s * 0.16);  // 0.84 → ~1.02 → 1.0
+    const ty  = (1 - Math.min(1, s)) * 32 + (card._hoverY || 0);   // drops from +32px
+
+    card.style.opacity   = opacity;
+    card.style.transform = `translateY(${ty}px) scale(${scl})`;
+    card.style.filter    = `blur(${Math.max(0, (1 - s * 1.8)) * 6}px)`;
+    if (opacity > 0) anyVisible = true;
   });
   usecases.style.opacity = 1;
   usecases.style.pointerEvents = anyVisible ? 'auto' : 'none';
@@ -475,7 +500,7 @@ function draw(ms) {
   computeSwings(t);
   updateFoldPull(dt);
   updateCardHover(dt);
-  updateText();
+  updateText(dt);
 
   for (let y = 0; y < SH; y++) {
     const ny = y / SH;
