@@ -368,6 +368,45 @@ function computeSwings(t) {
   }
 }
 
+// ─── Mouse wind ─────────────────────────────────────
+let mouseNX = -1, mouseNY = -1;
+let mouseSpeed = 0;
+const mouseDisp    = new Float32Array(NUM_FOLDS);
+const mouseDispVel = new Float32Array(NUM_FOLDS);
+
+document.addEventListener('mousemove', (e) => {
+  const nx = e.clientX / innerWidth;
+  const ny = e.clientY / innerHeight;
+  if (mouseNX >= 0) mouseSpeed += (nx - mouseNX) * 55;
+  mouseNX = nx;
+  mouseNY = ny;
+});
+document.addEventListener('mouseleave', () => {
+  mouseNX = -1;  mouseNY = -1;
+});
+
+function updateMouseWind(dt) {
+  mouseSpeed *= Math.pow(0.06, dt);          // fast decay between events
+
+  for (let i = 0; i < NUM_FOLDS; i++) {
+    let force = 0;
+    if (mouseNX >= 0) {
+      const dx = mouseNX - FOLDS[i].relPos;
+      force = mouseSpeed * Math.exp(-dx * dx / 0.014) * 0.5;
+    }
+
+    // neighbour coupling → wave propagation
+    const prev = i > 0             ? mouseDisp[i - 1] : mouseDisp[i];
+    const next = i < NUM_FOLDS - 1 ? mouseDisp[i + 1] : mouseDisp[i];
+    const coupling = (prev + next - 2 * mouseDisp[i]) * 35;
+
+    const accel = -22 * mouseDisp[i] - 7.5 * mouseDispVel[i] + force + coupling;
+    mouseDispVel[i] += accel * dt;
+    mouseDisp[i]    += mouseDispVel[i] * dt;
+    mouseDisp[i]     = Math.max(-0.08, Math.min(0.08, mouseDisp[i]));
+  }
+}
+
 // ─── Per-row precompute ───────────────────────────────
 const ROW_DATA = new Float32Array(NUM_FOLDS * 2);
 
@@ -405,6 +444,13 @@ function precomputeRow(ny) {
   for (let i = 0; i < NUM_FOLDS; i++) {
     const f = FOLDS[i];
     let fx = f.relPos + swingSmooth[i] * totalHang;
+
+    // Mouse wind — strongest at cursor height, fabric hangs looser below
+    if (mouseNY >= 0) {
+      const yDist = ny - mouseNY;
+      const yInfl = Math.exp(-yDist * yDist / 0.055);
+      fx += mouseDisp[i] * yInfl * (0.3 + totalHang * 0.7);
+    }
 
     const pull = foldPull[i] * dragLag;
     const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
@@ -517,6 +563,7 @@ function draw(ms) {
   const data = imgCache.data;
 
   computeSwings(t);
+  updateMouseWind(dt);
   updateFoldPull(dt);
   updateCardHover(dt);
   updateText(dt);
