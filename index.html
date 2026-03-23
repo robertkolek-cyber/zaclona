@@ -422,10 +422,10 @@ let curtainEdgeFrac = 1.05; // actual right edge of curtain (0..1+), from prev f
 let bottomPull = 0, bottomPullVel = 0;
 
 function updateFoldPull(dt) {
-  // Returning (scroll up) = much heavier spring — double down on delay
+  // Both directions: hesitation. Return is even heavier.
   const returning   = scrollPull < curtainPull;
-  const pullSpringK = returning ? 2.5 : 8.0;
-  const pullDamping = returning ? 2.8 : 4.5;
+  const pullSpringK = returning ? 2.5 : 4.0;
+  const pullDamping = returning ? 2.8 : 3.2;
   const pullAccel = pullSpringK * (scrollPull - curtainPull) - pullDamping * curtainVel;
   curtainVel  += pullAccel * dt;
   curtainPull += curtainVel * dt;
