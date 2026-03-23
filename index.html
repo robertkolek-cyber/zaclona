@@ -386,25 +386,33 @@ document.addEventListener('mouseleave', () => {
 });
 
 function updateMouseWind(dt) {
-  mouseSpeed *= Math.pow(0.14, dt);          // slower decay — wind lingers
+  mouseSpeed *= Math.pow(0.14, dt);
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     let force = 0;
     if (mouseNX >= 0) {
       const dx = mouseNX - FOLDS[i].relPos;
-      force = mouseSpeed * Math.exp(-dx * dx / 0.18) * 0.28; // wide gust, soft pressure
+      force = mouseSpeed * Math.exp(-dx * dx / 0.22) * 0.26;
     }
 
-    // soft neighbour coupling → gentle wave propagation
+    // stronger coupling so the wave travels across the whole curtain
     const prev = i > 0             ? mouseDisp[i - 1] : mouseDisp[i];
     const next = i < NUM_FOLDS - 1 ? mouseDisp[i + 1] : mouseDisp[i];
-    const coupling = (prev + next - 2 * mouseDisp[i]) * 18;
+    const coupling = (prev + next - 2 * mouseDisp[i]) * 55;
 
-    // low stiffness + low damping = floaty, lingering sway
     const accel = -11 * mouseDisp[i] - 3.5 * mouseDispVel[i] + force + coupling;
     mouseDispVel[i] += accel * dt;
     mouseDisp[i]    += mouseDispVel[i] * dt;
     mouseDisp[i]     = Math.max(-0.10, Math.min(0.10, mouseDisp[i]));
+  }
+
+  // Spatial blur — eliminates peaked "mountain" shape, makes displacement wave-like
+  // Same technique as swingSmooth: bi-directional passes
+  for (let pass = 0; pass < 4; pass++) {
+    for (let i = 1; i < NUM_FOLDS - 1; i++)
+      mouseDisp[i] = mouseDisp[i] * 0.5 + (mouseDisp[i-1] + mouseDisp[i+1]) * 0.25;
+    for (let i = NUM_FOLDS - 2; i > 0; i--)
+      mouseDisp[i] = mouseDisp[i] * 0.5 + (mouseDisp[i-1] + mouseDisp[i+1]) * 0.25;
   }
 }
 
@@ -446,13 +454,9 @@ function precomputeRow(ny) {
     const f = FOLDS[i];
     let fx = f.relPos + swingSmooth[i] * totalHang;
 
-    // Mouse wind — barely moves above push, cascades down like real fabric
-    if (mouseNY >= 0) {
-      const yDelta  = ny - mouseNY;
-      const spread  = yDelta > 0 ? 0.45 : 0.04;    // very broad below, tight above
-      const yInfl   = Math.exp(-yDelta * yDelta / spread);
-      const cascade = yDelta > 0 ? 1.0 + yDelta * 1.3 : 1.0;  // amplifies downward
-      fx += mouseDisp[i] * yInfl * cascade * (0.2 + totalHang * 0.8);
+    // Mouse wind — whole curtain responds, bottom swings more (natural hang)
+    if (mouseNX >= 0) {
+      fx += mouseDisp[i] * (0.1 + totalHang * 0.9);
     }
 
     const pull = foldPull[i] * dragLag;
