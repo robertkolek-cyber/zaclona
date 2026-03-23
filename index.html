@@ -417,8 +417,7 @@ function updateMouseWind(dt) {
 
 // ─── Per-row precompute ───────────────────────────────
 // Extra slot for the gathering fold at trailing edge
-const ROW_DATA = new Float32Array((NUM_FOLDS + 1) * 2);
-let gatherFoldActive = 0;  // 0..1 strength of gathering fold
+const ROW_DATA = new Float32Array(NUM_FOLDS * 2);
 
 const foldPull     = new Float32Array(NUM_FOLDS);
 const foldPullVel  = new Float32Array(NUM_FOLDS);
@@ -482,26 +481,6 @@ function precomputeRow(ny) {
     ROW_DATA[i * 2 + 1] = sigma * sigma;
   }
 
-  // ── Gathering fold: always at the curtain's actual visible right edge ──
-  gatherFoldActive = curtainPull;
-  if (gatherFoldActive > 0.01) {
-    // Find the curtain's natural edge = rightmost fold extent (same formula as draw loop)
-    let naturalEdgeX = -999;
-    for (let i = 0; i < NUM_FOLDS; i++) {
-      const fx = ROW_DATA[i * 2];
-      const s  = Math.sqrt(ROW_DATA[i * 2 + 1]);
-      const edge = fx + s * 3.0;
-      if (edge > naturalEdgeX) naturalEdgeX = edge;
-    }
-    if (naturalEdgeX > -0.5) {
-      const gSigma = 0.045 + curtainPull * 0.01;
-      // Place fold center well inside the opaque curtain — not at the fade zone
-      ROW_DATA[NUM_FOLDS * 2]     = naturalEdgeX - gSigma * 4.0;
-      ROW_DATA[NUM_FOLDS * 2 + 1] = gSigma * gSigma;
-    } else {
-      gatherFoldActive = 0;
-    }
-  }
 }
 
 // ─── Pixel light ─────────────────────────────────────
@@ -517,21 +496,6 @@ function lightAt(nx) {
     const hd    = d - sigma * 0.68;
     const hs2   = s2 * 0.25;
     light += (FOLDS[i].depth * 1.00) / (1 + (hd * hd) / hs2);
-  }
-  // Gathering fold — deep overlay that sweeps across the curtain
-  if (gatherFoldActive > 0.01) {
-    const gfx = ROW_DATA[NUM_FOLDS * 2];
-    const gs2 = ROW_DATA[NUM_FOLDS * 2 + 1];
-    const gd  = nx - gfx;
-    const gd2 = gd * gd;
-    // Deep shadow — looks like fabric folding over on top
-    const gDepth = 0.50 * Math.min(1, gatherFoldActive * 2.0);
-    light -= gDepth / (1 + gd2 / gs2);
-    // Bright highlight on the right side of the fold (light catching the ridge)
-    const gSigma = Math.sqrt(gs2);
-    const ghd  = gd - gSigma * 0.7;
-    const ghs2 = gs2 * 0.20;
-    light += (gDepth * 1.1) / (1 + (ghd * ghd) / ghs2);
   }
   return light;
 }
