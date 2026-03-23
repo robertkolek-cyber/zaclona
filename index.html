@@ -386,32 +386,35 @@ document.addEventListener('mouseleave', () => {
 });
 
 function updateMouseWind(dt) {
-  mouseSpeed *= Math.pow(0.14, dt);
+  // Wind lingers — decays to ~40% after 1s instead of snapping off
+  mouseSpeed *= Math.pow(0.38, dt);
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     let force = 0;
     if (mouseNX >= 0) {
       const dx = mouseNX - FOLDS[i].relPos;
-      force = mouseSpeed * Math.exp(-dx * dx / 0.22) * 0.26;
+      // Wider influence radius, stronger push
+      force = mouseSpeed * Math.exp(-dx * dx / 0.30) * 0.42;
     }
 
-    // stronger coupling so the wave travels across the whole curtain
+    // Wave coupling — disturbance travels across fabric like a ripple
     const prev = i > 0             ? mouseDisp[i - 1] : mouseDisp[i];
     const next = i < NUM_FOLDS - 1 ? mouseDisp[i + 1] : mouseDisp[i];
-    const coupling = (prev + next - 2 * mouseDisp[i]) * 55;
+    const coupling = (prev + next - 2 * mouseDisp[i]) * 28;
 
-    const accel = -11 * mouseDisp[i] - 3.5 * mouseDispVel[i] + force + coupling;
+    // Soft spring + low damping = floaty oscillation, not a snap-back
+    const accel = -4.2 * mouseDisp[i] - 1.4 * mouseDispVel[i] + force + coupling;
     mouseDispVel[i] += accel * dt;
     mouseDisp[i]    += mouseDispVel[i] * dt;
-    mouseDisp[i]     = Math.max(-0.055, Math.min(0.055, mouseDisp[i]));
+    mouseDisp[i]     = Math.max(-0.10, Math.min(0.10, mouseDisp[i]));
   }
 
-  // Spatial blur — smooth out any remaining peaks so adjacent folds never crease
-  for (let pass = 0; pass < 7; pass++) {
+  // Light blur only — preserve individual fold character
+  for (let pass = 0; pass < 2; pass++) {
     for (let i = 1; i < NUM_FOLDS - 1; i++)
-      mouseDisp[i] = mouseDisp[i] * 0.5 + (mouseDisp[i-1] + mouseDisp[i+1]) * 0.25;
+      mouseDisp[i] = mouseDisp[i] * 0.65 + (mouseDisp[i-1] + mouseDisp[i+1]) * 0.175;
     for (let i = NUM_FOLDS - 2; i > 0; i--)
-      mouseDisp[i] = mouseDisp[i] * 0.5 + (mouseDisp[i-1] + mouseDisp[i+1]) * 0.25;
+      mouseDisp[i] = mouseDisp[i] * 0.65 + (mouseDisp[i-1] + mouseDisp[i+1]) * 0.175;
   }
 }
 
@@ -489,9 +492,10 @@ function precomputeRow(ny) {
     // Sigma swell from breeze — folds billow fatter where wind hits, stronger at bottom
     if (mouseNX >= 0) {
       const dx = FOLDS[i].relPos - mouseNX;
-      const proximity = 0.35 + 0.65 * Math.exp(-dx * dx / 0.28);
-      const swell = Math.abs(mouseDisp[i]) * proximity * (0.4 + totalHang * 0.6);
-      sigma *= 1.0 + swell * 14.0;
+      // Wider proximity so billowing spreads across more fabric
+      const proximity = 0.30 + 0.70 * Math.exp(-dx * dx / 0.40);
+      const swell = Math.abs(mouseDisp[i]) * proximity * (0.3 + totalHang * 0.7);
+      sigma *= 1.0 + swell * 20.0;
     }
 
     ROW_DATA[i * 2]     = fx;
