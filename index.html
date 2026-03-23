@@ -372,11 +372,12 @@ function computeSwings(t) {
 // ─── Mouse breeze ────────────────────────────────────
 let mouseNX = -1, mouseNY = -1;
 let windTargetCX = 0.5; // instant mouse position
-let windCX  = 0.5;      // lagged — drifts toward target
-let windDirTarget = 0;  // instant direction
-let windDir = 0;        // smoothed direction, -1..1
-let windStrTarget = 0;  // instant energy from mouse speed
-let windStr = 0;        // smoothed strength 0..1
+let windCX  = 0.5;      // main wind center — follows with pleasant delay
+let windCX2 = 0.5;      // trailing wake — much slower, creates flowing tail
+let windDirTarget = 0;
+let windDir = 0;
+let windStrTarget = 0;
+let windStr = 0;
 
 document.addEventListener('mousemove', (e) => {
   const nx = e.clientX / innerWidth;
@@ -387,7 +388,7 @@ document.addEventListener('mousemove', (e) => {
     if (speed > 0.002) {
       windTargetCX = nx;
       windDirTarget = Math.sign(dx);
-      windStrTarget = Math.min(1.0, windStrTarget + speed * 3.5);
+      windStrTarget = Math.min(1.0, windStrTarget + speed * 3.0);
     }
   }
   mouseNX = nx;
@@ -396,12 +397,11 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseleave', () => { mouseNX = -1; mouseNY = -1; });
 
 function updateMouseWind(dt) {
-  // Everything drifts toward targets — never jumps
-  windCX  += (windTargetCX - windCX)   * Math.min(1.0, dt * 2.8);
-  windDir += (windDirTarget - windDir)  * Math.min(1.0, dt * 3.5);
-  windStr += (windStrTarget - windStr)  * Math.min(1.0, dt * 3.0);
-  // Target decays — breeze fades after mouse stops
-  windStrTarget *= Math.pow(0.10, dt);
+  windCX  += (windTargetCX - windCX)   * Math.min(1.0, dt * 2.5);
+  windCX2 += (windTargetCX - windCX2)  * Math.min(1.0, dt * 0.8); // slow trailing wake
+  windDir += (windDirTarget - windDir)  * Math.min(1.0, dt * 3.0);
+  windStr += (windStrTarget - windStr)  * Math.min(1.0, dt * 2.2); // gentler ramp
+  windStrTarget *= Math.pow(0.16, dt); // longer linger
   if (windStr < 0.002 && windStrTarget < 0.002) { windStr = 0; windStrTarget = 0; }
 }
 
@@ -457,11 +457,20 @@ function precomputeRow(ny, t) {
     const f = FOLDS[i];
     let fx = f.relPos + swingSmooth[i] * totalHang;
 
-    // Mouse breeze — gaussian push at wind center, travels in mouse direction
+    // Mouse breeze — layered: sharp push near cursor + wide trailing wake
     if (windStr > 0.002) {
-      const dx = f.relPos - windCX;
-      const envelope = Math.exp(-dx * dx / 0.07);
-      fx += windDir * windStr * 0.05 * envelope * (0.1 + totalHang * 0.9);
+      const dx1 = f.relPos - windCX;
+      const dx2 = f.relPos - windCX2;
+      const env1 = Math.exp(-dx1 * dx1 / 0.06); // focused near cursor
+      const env2 = Math.exp(-dx2 * dx2 / 0.16); // wide trailing wake
+      fx += windDir * windStr * (0.038 * env1 + 0.025 * env2) * (0.1 + totalHang * 0.9);
+    }
+
+    // Hover warmth — folds near cursor breathe a little more, even when still
+    if (mouseNX >= 0) {
+      const dx = f.relPos - mouseNX;
+      const prox = Math.exp(-dx * dx / 0.04);
+      fx += Math.sin(t * 1.5 + f.phase * 1.4) * prox * 0.014 * totalHang;
     }
 
     // Vertical row pull: top tracks curtainPull, bottom lags via bottomPull
@@ -476,11 +485,13 @@ function precomputeRow(ny, t) {
     const blend = Math.pow(ny, 0.7);
     let sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
 
-    // Sigma swell — folds open where the wind packet hits
+    // Sigma swell — folds billow where wind and wake touch
     if (windStr > 0.002) {
-      const dx = f.relPos - windCX;
-      const envelope = Math.exp(-dx * dx / 0.07);
-      sigma *= 1.0 + envelope * windStr * 0.30;
+      const dx1 = f.relPos - windCX;
+      const dx2 = f.relPos - windCX2;
+      const env1 = Math.exp(-dx1 * dx1 / 0.06);
+      const env2 = Math.exp(-dx2 * dx2 / 0.16);
+      sigma *= 1.0 + windStr * (env1 * 0.22 + env2 * 0.14);
     }
 
     ROW_DATA[i * 2]     = fx;
