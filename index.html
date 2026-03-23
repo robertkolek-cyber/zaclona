@@ -89,14 +89,19 @@
       font-family: 'Instrument Sans', sans-serif;
       font-size: clamp(20px, 2.2vw, 28px);
       font-weight: 600;
-      color: #fff;
+      color: #000;
       white-space: nowrap;
-      opacity: 0;
       z-index: 2;
       pointer-events: none;
       mix-blend-mode: difference;
       will-change: transform, opacity;
-      animation: sub-in 1.0s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
+      animation: blend-appear 1.4s cubic-bezier(0.16, 1, 0.3, 1) 2.0s forwards;
+    }
+    .name-lockup .word { display: inline-block; overflow: hidden; vertical-align: bottom; }
+    .name-lockup .wi {
+      display: inline-block;
+      transform: translateY(108%);
+      animation: word-rise 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
   </style>
@@ -122,6 +127,13 @@
   const words = h1.textContent.trim().split(' ');
   h1.innerHTML = words.map((w, i) =>
     `<span class="word"><span class="wi" style="animation-delay:${250 + i * 110}ms">${w}</span></span>`
+  ).join(' ');
+
+  // Same word-mask effect for name lockup, starting after headline
+  const lockup = document.getElementById('nameLockup');
+  const lWords = lockup.textContent.trim().split(' ');
+  lockup.innerHTML = lWords.map((w, i) =>
+    `<span class="word"><span class="wi" style="animation-delay:${2000 + i * 110}ms">${w}</span></span>`
   ).join(' ');
 })();
 
