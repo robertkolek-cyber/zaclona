@@ -542,15 +542,13 @@ function updateText(dt) {
   tile.style.opacity = opacity;
   if (visualPull > 0.35) nameLockup.style.opacity = opacity;
 
-  // Clip text to actual curtain right edge (from previous frame's render)
-  const edgePx = curtainEdgeFrac * innerWidth;
-  function clipAtEdge(el) {
-    const r = el.getBoundingClientRect();
-    const over = r.right - edgePx;
-    el.style.clipPath = over > 0 ? `inset(0 ${over}px 0 0)` : 'none';
-  }
-  clipAtEdge(tile);
-  clipAtEdge(nameLockup);
+  // Mask text to curtain edge — fade out anything right of the curtain
+  const edgePct   = curtainEdgeFrac * 100;
+  const maskGrad  = `linear-gradient(to right, black ${edgePct - 2}%, transparent ${edgePct + 1}%)`;
+  tile.style.webkitMaskImage = maskGrad;
+  tile.style.maskImage       = maskGrad;
+  nameLockup.style.webkitMaskImage = maskGrad;
+  nameLockup.style.maskImage       = maskGrad;
 
   // Staggered blur-reveal — each card clears as the curtain sweeps past
   const cards    = usecases.querySelectorAll('.uc-card');
