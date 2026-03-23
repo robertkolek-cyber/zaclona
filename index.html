@@ -431,9 +431,9 @@ function updateFoldPull(dt) {
   curtainPull += curtainVel * dt;
   curtainPull  = Math.max(0, Math.min(1.0, curtainPull));
 
-  // Bottom drapes heavier — always lazier, noticeably so on return
-  const bK     = returning ? 2.0 : 3.5;
-  const bDamp  = returning ? 2.5 : 2.8;
+  // Bottom follows closer — slight lag, not a big drape
+  const bK     = returning ? 3.5 : 5.0;
+  const bDamp  = returning ? 3.0 : 3.5;
   const bAccel = bK * (curtainPull - bottomPull) - bDamp * bottomPullVel;
   bottomPullVel += bAccel * dt;
   bottomPull    += bottomPullVel * dt;
@@ -548,12 +548,13 @@ function updateText(dt) {
   if (tileInitialRight === null) {
     tileInitialRight = tile.getBoundingClientRect().right;
     tileInitialEdge  = curtainEdgeFrac;
-    textRight        = tileInitialRight;
+    textRight        = tileInitialRight + innerWidth * 0.12;
   }
 
-  // Target: where text wants to be (lagging behind curtain)
+  // Arc shifted right: at rest text is ~12vw right of anchor,
+  // as curtain pulls it drifts left, anchor area is the leftmost point
   const curtainShift = (curtainEdgeFrac - tileInitialEdge) * innerWidth;
-  const targetRight  = tileInitialRight + curtainShift;
+  const targetRight  = tileInitialRight + innerWidth * 0.12 + curtainShift;
 
   // Drift toward target with lag — wiggle room
   textRight += (targetRight - textRight) * Math.min(1, dt * 4.5);
