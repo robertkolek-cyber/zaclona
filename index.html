@@ -203,9 +203,8 @@
 
 <div class="tiles-dots" id="tilesDots"></div>
 
-<!-- Scroll space: 1200vh gives tiles progress 0→1 over full scroll -->
-<!-- At scrollY=300vh curtain is fully open AND first tile is at center (progress=0.25) -->
-<div style="height:1200vh"></div>
+<!-- 300vh curtain + 900vh tiles = 1200vh scroll, 1300vh body -->
+<div style="height:1300vh"></div>
 
 <script>
 // ─── Word-mask split ─────────────────────────────────
@@ -633,17 +632,23 @@ tileCards.forEach(() => {
 const dotEls = Array.from(tilesDots.querySelectorAll('.tiles-dot'));
 
 function updateTiles() {
-  // progress 0→1 over 1200vh; at scrollY=300vh (curtain done) progress=0.25 = tile 0 center
-  const progress = Math.max(0, Math.min(1, window.scrollY / (12 * innerHeight)));
+  // Starts at 0 when curtain is done (scrollY = 3×vh), runs 900vh.
+  // Tile 0 center = progress 0 → already at full scale the moment curtain opens.
+  const progress = Math.max(0, Math.min(1,
+    (window.scrollY - 3 * innerHeight) / (9 * innerHeight)
+  ));
 
-  const step    = 0.75 / TOTAL_ITEMS;
+  const step    = 1 / TOTAL_ITEMS; // even spacing across 0–1
   const isLarge = innerWidth >= 1440;
+
+  // Blur driven by curtain: starts at 14px, fully sharp when curtain is open
+  const blurPx = Math.max(0, (1 - curtainPull) * 14);
 
   let activeDot = -1;
 
   tileCards.forEach((card, i) => {
     const isCTA  = i === TOTAL_ITEMS - 1;
-    const center = 0.25 + i * step;
+    const center = i * step;          // tile 0 center = 0
     const start  = center - step * 1.15;
     const end    = center + step * 0.85;
 
@@ -652,32 +657,34 @@ function updateTiles() {
       ? interpolate(progress, [start, center, end], [0.85, 1.0, 1.1])
       : interpolate(progress, [start, center, end], [0.3, 1, 3.5]);
 
-    // Opacity (5-point)
+    // Opacity (5-point: fast fade-in, long hold, short fade-out)
     const opIn  = start + 0.30 * (center - start);
     const opOut = end   - 0.20 * (end - center);
     const opacity = interpolate(progress,
       [start, opIn, center, opOut, end],
       [0, 1, 1, 1, 0]);
 
-    // TranslateX in vw
+    // TranslateX: tiles enter near center (±3vw), exit far (±250vw)
+    // Center is always 0 — tile sits perfectly centered at peak
     let tx = 0;
     if (!isCTA) {
-      const even = i % 2 === 0;
+      const even = i % 2 === 0; // even→right, odd→left
       if (isLarge) {
         tx = interpolate(progress, [start, center, end],
-          even ? [5, 20, 250] : [-5, -20, -250]);
+          even ? [-3, 0, 250] : [3, 0, -250]);
       } else {
         const midOut = center + 0.25 * (end - center);
         tx = interpolate(progress, [start, center, midOut, end],
-          even ? [3, 12, 120, 250] : [-3, -12, -120, -250]);
+          even ? [-3, 0, 120, 250] : [3, 0, -120, -250]);
       }
     }
 
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
     card.style.opacity   = opacity;
     card.style.zIndex    = Math.round(scale * 100);
+    card.style.filter    = `blur(${blurPx}px)`;
 
-    // Active dot: 70% bias toward start of window
+    // Active dot: switch at 70% bias toward start
     const bias = start + 0.30 * (center - start);
     if (progress >= bias) activeDot = i;
   });
