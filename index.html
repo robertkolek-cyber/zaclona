@@ -85,18 +85,16 @@
     .name-lockup {
       position: fixed;
       bottom: 40px;
-      left: 38%;
-      transform: translateX(-50%);
+      left: 0;
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: clamp(30px, 3.3vw, 42px);
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      opacity: 0;
       z-index: 2;
       pointer-events: none;
       mix-blend-mode: difference;
-      font-family: 'Instrument Sans', sans-serif;
-      font-size: clamp(10px, 1.1vw, 14px);
-      font-weight: 600;
-      color: #fff;
-      letter-spacing: 0.04em;
-      white-space: nowrap;
-      opacity: 0;
       will-change: transform, opacity;
       animation: sub-in 1.0s cubic-bezier(0.16, 1, 0.3, 1) 0.4s forwards;
     }
@@ -269,14 +267,19 @@ function lightAt(nx) {
 }
 
 // ─── Text animation state ─────────────────────────────
+// Sync lockup left edge to the tile's left edge on each frame
+function alignLockup() {
+  const rect = tile.getBoundingClientRect();
+  nameLockup.style.left = rect.left + 'px';
+}
+
 function updateText() {
   const textX = curtainPull * -55;
   tile.style.transform = `translate(calc(-50% + ${textX}vw), -50%)`;
-  nameLockup.style.transform = `translateX(calc(-50% + ${textX}vw))`;
+  alignLockup();
   const rawOpacity = 1 - (curtainPull - 0.35) / (0.62 - 0.35);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
   tile.style.opacity = opacity;
-  // Only override lockup opacity once the curtain starts fading (don't fight the intro CSS animation)
   if (curtainPull > 0.35) nameLockup.style.opacity = opacity;
 }
 
