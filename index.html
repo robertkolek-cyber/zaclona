@@ -125,6 +125,9 @@
       border-radius: 4px;
       padding: clamp(20px, 2.5vw, 36px);
       background: #fff;
+      opacity: 0;
+      transform: translateY(18px);
+      will-change: opacity, transform;
     }
 
     .uc-card h2 {
@@ -355,10 +358,19 @@ function updateText() {
   tile.style.opacity = opacity;
   if (curtainPull > 0.35) nameLockup.style.opacity = opacity;
 
-  // Fade in use-case tiles once curtain is nearly gone
-  const ucOpacity = Math.max(0, Math.min(1, (curtainPull - 0.82) / 0.12));
-  usecases.style.opacity = ucOpacity;
-  usecases.style.pointerEvents = ucOpacity > 0.5 ? 'auto' : 'none';
+  // Staggered reveal — each card starts as the curtain sweeps past its column
+  const cards = usecases.querySelectorAll('.uc-card');
+  const starts = [0.52, 0.63, 0.74];   // curtainPull when each card begins appearing
+  const range  = 0.14;                  // how much pull it takes to go 0→1 opacity
+  let anyVisible = false;
+  cards.forEach((card, i) => {
+    const t = Math.max(0, Math.min(1, (curtainPull - starts[i]) / range));
+    card.style.opacity   = t;
+    card.style.transform = `translateY(${(1 - t) * 18}px)`;
+    if (t > 0) anyVisible = true;
+  });
+  usecases.style.opacity = 1;
+  usecases.style.pointerEvents = anyVisible ? 'auto' : 'none';
 }
 
 // ─── Draw loop ───────────────────────────────────────
