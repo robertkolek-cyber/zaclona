@@ -373,8 +373,8 @@ function updateText() {
 
   // Staggered reveal — each card starts as the curtain sweeps past its column
   const cards = usecases.querySelectorAll('.uc-card');
-  const starts = [0.74, 0.63, 0.52];   // right card first, then middle, then left
-  const range  = 0.14;                  // how much pull it takes to go 0→1 opacity
+  const starts = [0.52, 0.38, 0.25];   // right card first, then middle, then left
+  const range  = 0.13;                  // how much pull it takes to go 0→1 opacity
   let anyVisible = false;
   cards.forEach((card, i) => {
     const t = Math.max(0, Math.min(1, (curtainPull - starts[i]) / range));
