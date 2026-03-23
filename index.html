@@ -6,7 +6,7 @@
   <title>Curtain</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600&family=Plus+Jakarta+Sans:wght@500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { width: 100%; background: #fff; }
@@ -20,44 +20,28 @@
       transform: translate(-50%, -50%);
       z-index: 2;
       text-align: left;
-      max-width: 480px;
       pointer-events: none;
       will-change: transform, opacity;
     }
 
-    .headline-wrap {
-      position: relative;
-      min-height: clamp(18px, 2.8vw, 40px);
-      margin-bottom: clamp(8px, 1.2vw, 16px);
-    }
-
-    .headline-normal,
-    .headline-italic {
-      position: absolute;
-      top: 0; left: 0;
-      font-family: 'Instrument Serif', serif;
-      font-size: clamp(22px, 3.2vw, 52px);
-      font-weight: 400;
-      color: #fff;
-      line-height: 1.18;
-      letter-spacing: -0.01em;
-      transition: opacity 0.45s ease;
+    .project-tile h1 {
+      font-family: 'Instrument Sans', sans-serif;
+      font-size: clamp(33px, 4.8vw, 78px);
+      font-weight: 600;
+      color: #A8A8A8;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
       white-space: nowrap;
+      margin-bottom: clamp(10px, 1.4vw, 20px);
     }
-    .headline-normal { font-style: normal; opacity: 1; }
-    .headline-italic  { font-style: italic;  opacity: 0; }
 
     .project-tile p {
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: clamp(10px, 1.1vw, 14px);
       font-weight: 500;
-      color: #fff;
+      color: #A8A8A8;
       letter-spacing: 0.09em;
       text-transform: uppercase;
-    }
-
-    .project-tile {
-      mix-blend-mode: difference;
     }
 
   </style>
@@ -65,10 +49,7 @@
 <body>
 
 <div class="project-tile" id="tile">
-  <div class="headline-wrap">
-    <h1 class="headline-normal" id="hn">The real design is always underneath</h1>
-    <h1 class="headline-italic"  id="hi">The real design is always underneath</h1>
-  </div>
+  <h1>The real design is always underneath</h1>
   <p>scroll to explore</p>
 </div>
 
@@ -82,9 +63,7 @@ const small = document.createElement('canvas');
 const sctx  = small.getContext('2d');
 const SCALE = 4;
 
-const tile           = document.getElementById('tile');
-const headlineNormal = document.getElementById('hn');
-const headlineItalic = document.getElementById('hi');
+const tile = document.getElementById('tile');
 
 
 function resize() {
@@ -218,24 +197,11 @@ function lightAt(nx) {
 }
 
 // ─── Text animation state ─────────────────────────────
-let prevIsMoving = false;
-
 function updateText() {
-  // Translate text with the curtain — slightly faster for parallax
   const textX = curtainPull * -55;
-  tile.style.transform          = `translate(calc(-50% + ${textX}vw), -50%)`;
-  // Fade out between 35%–62% of pull
+  tile.style.transform = `translate(calc(-50% + ${textX}vw), -50%)`;
   const rawOpacity = 1 - (curtainPull - 0.35) / (0.62 - 0.35);
-  const opacity = Math.max(0, Math.min(1, rawOpacity));
-  tile.style.opacity = opacity;
-
-  // Italic cross-fade: switch when curtainVel is meaningful
-  const isMoving = Math.abs(curtainVel) > 0.04;
-  if (isMoving !== prevIsMoving) {
-    headlineNormal.style.opacity = isMoving ? '0' : '1';
-    headlineItalic.style.opacity = isMoving ? '1' : '0';
-    prevIsMoving = isMoving;
-  }
+  tile.style.opacity = Math.max(0, Math.min(1, rawOpacity));
 }
 
 // ─── Draw loop ───────────────────────────────────────
