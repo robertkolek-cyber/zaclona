@@ -651,7 +651,7 @@ function draw(ms) {
         const edgeX = fx + Math.sqrt(s2) * 3.0;
         if (edgeX > maxFoldX) maxFoldX = edgeX;
       }
-      const edgeFade = Math.max(0, Math.min(1, (maxFoldX - nx) / 0.03));
+      const edgeFade = Math.max(0, Math.min(1, (maxFoldX - nx) / 0.006));
       const alpha = Math.round(edgeFade * 255);
 
       const idx   = (y * SW + x) * 4;
