@@ -652,14 +652,14 @@ function updateTiles() {
 
   tileCards.forEach((card, i) => {
     const isCTA  = i === TOTAL_ITEMS - 1;
-    const center = (i + 0.5) * step;  // centered in each slot
-    const start  = center - step * 1.8;  // wider overlap so next tile is visible "in the distance"
+    const center = (i + 0.5) * step;
+    const start  = center - step * 1.15;
     const end    = center + step * 0.85;
 
-    // Scale — enter small ("in the distance"), full at center, shrink on exit
+    // Scale
     const scale = isCTA
-      ? interpolate(progress, [start, center, end], [0.85, 1.0, 1.05])
-      : interpolate(progress, [start, center, end], [0.65, 1, 0.4]);
+      ? interpolate(progress, [start, center, end], [0.85, 1.0, 1.1])
+      : interpolate(progress, [start, center, end], [0.3, 1, 3.5]);
 
     // Opacity (5-point: fast fade-in, long hold, short fade-out)
     const opIn  = start + 0.30 * (center - start);
@@ -668,10 +668,14 @@ function updateTiles() {
       [start, opIn, center, opOut, end],
       [0, 1, 1, 1, 0]);
 
-    // All tiles enter from right ("in the distance"), sit slightly right at peak, exit left
+    // Two anchor points: even tiles grow from LEFT (-15vw), odd from RIGHT (+15vw)
+    // Same zoom behavior as before, just offset to two positions
     let tx = 0;
     if (!isCTA) {
-      tx = interpolate(progress, [start, center, end], [18, 2, -100]);
+      const even = i % 2 === 0;
+      const anchor = even ? -15 : 15;
+      tx = interpolate(progress, [start, center, end],
+        [anchor - 3, anchor, anchor + (even ? 250 : -250)]);
     }
 
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
