@@ -159,6 +159,17 @@
       transform: scale(1.5);
     }
 
+    @media (max-width: 1366px) {
+      .tile-card {
+        width: min(285px, 59vw);
+        border-radius: 21px;
+        padding: clamp(21px, 2.6vw, 36px);
+      }
+      .tile-title {
+        font-size: clamp(20px, 2.6vw, 39px);
+      }
+    }
+
   </style>
 </head>
 <body>
