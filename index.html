@@ -145,7 +145,7 @@
       display: flex;
       gap: 7px;
       pointer-events: none;
-      z-index: 2;
+      z-index: 0;
     }
     .tiles-dot {
       width: 5px;
@@ -601,6 +601,7 @@ function draw(ms) {
   ctx.fillStyle = hem;
   ctx.fillRect(0, H * 0.85, W, H * 0.15);
 
+  updateTiles();
   requestAnimationFrame(draw);
 }
 
@@ -644,11 +645,14 @@ function updateTiles() {
   // Blur driven by curtain: starts at 14px, fully sharp when curtain is open
   const blurPx = Math.max(0, (1 - curtainPull) * 14);
 
+  // Dots and tiles hidden behind curtain, revealed as it opens
+  tilesDots.style.opacity = curtainPull;
+
   let activeDot = -1;
 
   tileCards.forEach((card, i) => {
     const isCTA  = i === TOTAL_ITEMS - 1;
-    const center = i * step;          // tile 0 center = 0
+    const center = (i + 0.5) * step;  // centered in each slot so tile 0 enters from left
     const start  = center - step * 1.15;
     const end    = center + step * 0.85;
 
