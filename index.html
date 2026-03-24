@@ -650,7 +650,7 @@ function updateTiles() {
   const isLarge = innerWidth >= 1440;
 
   // Blur driven by curtain: starts at 14px, fully sharp when curtain is open
-  const blurPx = Math.max(0, (1 - curtainPull * 4) * 14);
+  const blurPx = Math.max(0, (1 - curtainPull * 2) * 14);
 
   // Dots and tiles hidden behind curtain, revealed as it opens
   tilesDots.style.opacity = curtainPull;
