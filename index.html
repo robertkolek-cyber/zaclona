@@ -132,7 +132,7 @@
     }
     .tile-title {
       font-family: 'Instrument Sans', sans-serif;
-      font-size: clamp(26px, 3.4vw, 52px);
+      font-size: clamp(20px, 2.1vw, 36px);
       font-weight: 600;
       line-height: 1.06;
       letter-spacing: -0.03em;
@@ -159,6 +159,18 @@
       transform: scale(1.5);
     }
 
+    .tile-noise {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      pointer-events: none;
+      mix-blend-mode: screen;
+      image-rendering: pixelated;
+      opacity: 0;
+    }
+
     @media (max-width: 1366px) {
       .tile-card {
         width: min(285px, 59vw);
@@ -166,7 +178,7 @@
         padding: clamp(21px, 2.6vw, 36px);
       }
       .tile-title {
-        font-size: clamp(20px, 2.6vw, 39px);
+        font-size: clamp(15px, 1.6vw, 27px);
       }
     }
 
@@ -209,7 +221,7 @@
 </div>
 <div class="tile-card" style="background:#f0ede8;color:#1c1c1c;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;">
   <span class="tile-tag" style="margin-bottom:0;color:#1c1c1c;">Available for work</span>
-  <h2 class="tile-title" style="font-size:clamp(28px,4vw,58px);">Let's make<br>something<br>remarkable</h2>
+  <h2 class="tile-title" style="font-size:clamp(20px,2.6vw,42px);">Let's make<br>something<br>remarkable</h2>
 </div>
 
 <div class="tiles-dots" id="tilesDots"></div>
@@ -631,6 +643,44 @@ const tileCards    = Array.from(document.querySelectorAll('.tile-card'));
 const tilesDots    = document.getElementById('tilesDots');
 const TOTAL_ITEMS  = tileCards.length;
 
+// ─── Noise canvases (one per tile, for dissolve effect) ──
+tileCards.forEach(card => {
+  const nc = document.createElement('canvas');
+  nc.className = 'tile-noise';
+  card.appendChild(nc);
+  card._noise = { canvas: nc, ctx: nc.getContext('2d'), w: 0, h: 0 };
+});
+
+function drawGrain(noise, intensity) {
+  const card = noise.canvas.parentElement;
+  const cw = card.offsetWidth;
+  const ch = card.offsetHeight;
+  if (!cw || !ch) return;
+
+  // Render at 1/3 resolution → chunky film-grain pixels when CSS-stretched
+  const gw = Math.ceil(cw / 3);
+  const gh = Math.ceil(ch / 3);
+  if (noise.w !== gw || noise.h !== gh) {
+    noise.canvas.width  = gw;
+    noise.canvas.height = gh;
+    noise.w = gw; noise.h = gh;
+  }
+
+  const ctx = noise.ctx;
+  if (intensity <= 0) { ctx.clearRect(0, 0, gw, gh); return; }
+
+  const id = ctx.createImageData(gw, gh);
+  const d  = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (Math.random() < intensity) {
+      const v = Math.random() * 255 | 0;
+      d[i] = d[i+1] = d[i+2] = v;
+      d[i+3] = ((0.3 + Math.random() * 0.7) * intensity * 255) | 0;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
 // Build indicator dots
 tileCards.forEach(() => {
   const d = document.createElement('span');
@@ -702,10 +752,20 @@ function updateTiles() {
         [anchor, anchor, right ? 250 : -250]);
     }
 
+    // Dissolve: kicks in after tile passes its peak
+    const dissolveT      = Math.max(0, Math.min(1, (progress - center) / (end - center)));
+    const dissolveBlur   = Math.pow(dissolveT, 1.2) * 18;
+    const grainIntensity = Math.max(0, Math.min(1, (dissolveT - 0.1) / 0.55));
+
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
     card.style.opacity   = opacity * Math.min(1, curtainPull * 8);
     card.style.zIndex    = Math.round(scale * 100);
-    card.style.filter    = `blur(${blurPx}px)`;
+    card.style.filter    = `blur(${blurPx + dissolveBlur}px)`;
+
+    if (card._noise) {
+      card._noise.canvas.style.opacity = dissolveT;
+      drawGrain(card._noise, grainIntensity);
+    }
 
     // Active dot: switch at 70% bias toward start
     const bias = start + 0.30 * (center - start);
