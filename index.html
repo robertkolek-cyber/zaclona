@@ -11,14 +11,14 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { width: 100%; background: #fff; }
     body { width: 100%; margin: 0; padding: 0; background: #fff; }
-    canvas { position: fixed; inset: 0; display: block; pointer-events: none; z-index: 1000; }
+    canvas { position: fixed; inset: 0; display: block; pointer-events: none; z-index: 500; }
 
     .project-tile {
       position: fixed;
       top: 42%;
       left: clamp(24px, 5vw, 80px);
       transform: translateY(-50%);
-      z-index: 2;
+      z-index: 1001;
       text-align: left;
       pointer-events: none;
       will-change: transform, opacity;
@@ -91,7 +91,7 @@
       font-weight: 600;
       color: #000;
       white-space: nowrap;
-      z-index: 2;
+      z-index: 1001;
       pointer-events: none;
       mix-blend-mode: difference;
       will-change: transform, opacity;
