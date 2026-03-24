@@ -368,6 +368,7 @@ function updateMouseWind(dt) {
 // Extra slot for the gathering fold at trailing edge
 const ROW_DATA = new Float32Array(NUM_FOLDS * 2);
 
+const HALF_FOLD    = Math.floor(NUM_FOLDS / 2);   // center split index
 const foldPull     = new Float32Array(NUM_FOLDS);
 const foldPullVel  = new Float32Array(NUM_FOLDS);
 let visualPull = 0;      // average fold pull — where the curtain visually is
@@ -400,8 +401,9 @@ function updateFoldPull(dt) {
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     const foldNX = FOLDS[i].relPos;
-    const responsiveness = 1.5 + foldNX * foldNX * 6.0;
-    const foldThreshold = (1.0 - foldNX) * 0.04;
+    const distFromCenter = Math.abs(foldNX - 0.5) * 2;  // 0 at center, 1 at edges
+    const responsiveness = 1.5 + (1 - distFromCenter) * (1 - distFromCenter) * 6.0;
+    const foldThreshold = distFromCenter * 0.04;
     const foldTarget = Math.max(0, Math.min(1, (curtainPull - foldThreshold) / (1.0 - foldThreshold)));
 
     // Reduce neighbor coupling while scrolling — less cascade wave, stiffer fabric
@@ -456,8 +458,11 @@ function precomputeRow(ny, t) {
     const rowPull = curtainPull * (1 - ny2) + bottomPull * ny2;
     // Horizontal cascade from foldPull[i], blended with row vertical lag
     const effectivePull = foldPull[i] * (1 - ny2) + rowPull * ny2;
-    // Slide folds off-screen left (gathered), staggered per fold
-    const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
+    // Theater split: left folds gather left, right folds gather right
+    const isLeft = i < HALF_FOLD;
+    const gatheredX = isLeft
+      ? -1.2 - (HALF_FOLD - 1 - i) * 0.015
+      :  2.2 + (i - HALF_FOLD) * 0.015;
     fx = fx * (1 - effectivePull) + gatheredX * effectivePull;
 
     const blend = Math.pow(ny, 0.7);
@@ -495,41 +500,12 @@ function lightAt(nx) {
   return light;
 }
 
-// ─── Text animation state ─────────────────────────────
-let tileInitialRight = null;
-let tileInitialEdge  = null;
-
-function alignLockup() {
-  const rect = tile.getBoundingClientRect();
-  nameLockup.style.left = rect.left + 'px';
-}
-
 function updateText(dt) {
-  if (tileInitialRight === null) {
-    tileInitialRight = tile.getBoundingClientRect().right;
-    tileInitialEdge  = stableCurtainEdge;
-  }
-
-  const curtainShift = (stableCurtainEdge - tileInitialEdge) * innerWidth;
-  const targetRight  = tileInitialRight + curtainShift;
-  const curtainEdgePx = stableCurtainEdge * innerWidth;
-  const clampedRight  = Math.min(targetRight, curtainEdgePx);
-
-  tile.style.left      = 'auto';
-  tile.style.right     = Math.max(0, innerWidth - clampedRight) + 'px';
-  tile.style.transform = 'translateY(-50%)';
-  tile.style.webkitMaskImage = 'none';
-  tile.style.maskImage       = 'none';
-
-  alignLockup();
-
-  const rawOpacity = 1 - (visualPull - 0.1) / (0.62 - 0.1);
+  // Text stays centered, fades out as curtain parts
+  const rawOpacity = 1 - (visualPull - 0.05) / (0.45 - 0.05);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
   tile.style.opacity = opacity;
-  nameLockup.style.opacity = visualPull > 0.35 ? opacity : 1;
-
-  nameLockup.style.webkitMaskImage = 'none';
-  nameLockup.style.maskImage       = 'none';
+  nameLockup.style.opacity = visualPull > 0.25 ? opacity : 1;
 }
 
 // ─── Draw loop ───────────────────────────────────────
@@ -558,34 +534,20 @@ function draw(ms) {
     const ny = y / SH;
     precomputeRow(ny, t);
 
-    // Compute row's right edge once (doesn't depend on x)
-    let rowMaxFoldX = -999;
+    // Compute split-curtain inner edges (left curtain's right edge, right curtain's left edge)
+    let leftCurtainRight = -999;
+    let rightCurtainLeft = 999;
     for (let fi = 0; fi < NUM_FOLDS; fi++) {
       const fx = ROW_DATA[fi * 2];
       const s2 = ROW_DATA[fi * 2 + 1];
-      const edgeX = fx + Math.sqrt(s2) * 3.0;
-      if (edgeX > rowMaxFoldX) rowMaxFoldX = edgeX;
-    }
-
-    // Capture curtain edge near the text row (~42% height) for text clipping
-    if (y === Math.round(SH * 0.42)) {
-      curtainEdgeFrac = rowMaxFoldX;
-      // Stable edge: fold base positions + pull only, no breeze/wind/hover
-      const ny42 = 0.42;
-      const ny42sq = ny42 * ny42 * 0.5;
-      const rowPull42 = curtainPull * (1 - ny42sq) + bottomPull * ny42sq;
-      let stableMax = -999;
-      for (let fi = 0; fi < NUM_FOLDS; fi++) {
-        const f = FOLDS[fi];
-        const ep = foldPull[fi] * (1 - ny42sq) + rowPull42 * ny42sq;
-        const gx = -1.2 - (NUM_FOLDS - fi) * 0.015;
-        const sx = f.relPos * (1 - ep) + gx * ep;
-        const blend = Math.pow(ny42, 0.7);
-        const sig = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
-        const edge = sx + sig * 3.0;
-        if (edge > stableMax) stableMax = edge;
+      const sigma3 = Math.sqrt(s2) * 3.0;
+      if (fi < HALF_FOLD) {
+        const edge = fx + sigma3;
+        if (edge > leftCurtainRight) leftCurtainRight = edge;
+      } else {
+        const edge = fx - sigma3;
+        if (edge < rightCurtainLeft) rightCurtainLeft = edge;
       }
-      stableCurtainEdge = stableMax;
     }
 
     const vertLight = 1.0 - ny * 0.06;
@@ -605,7 +567,9 @@ function draw(ms) {
       const g = Math.min(255, Math.round(65 + l * 190  + peach * 30));
       const b = Math.min(255, Math.round(105 + l * 150 - peach * 22));
 
-      const edgeFade = Math.max(0, Math.min(1, (rowMaxFoldX - nx) / 0.006));
+      const fadeL = Math.max(0, Math.min(1, (leftCurtainRight - nx) / 0.006));
+      const fadeR = Math.max(0, Math.min(1, (nx - rightCurtainLeft) / 0.006));
+      const edgeFade = Math.max(fadeL, fadeR);
       const alpha = Math.round(edgeFade * 255);
 
       const idx   = (y * SW + x) * 4;
