@@ -495,8 +495,8 @@ function updateText(dt) {
   const curtainShift = (curtainEdgeFrac - tileInitialEdge) * innerWidth;
   const targetRight  = tileInitialRight + innerWidth * 0.03 + curtainShift;
 
-  // Drift toward target with lag — wiggle room
-  textRight += (targetRight - textRight) * Math.min(1, dt * 4.5);
+  // Snap directly to target position (no breeze drift)
+  textRight = targetRight;
 
   // Hard clamp: never extend past the curtain edge
   const curtainEdgePx = curtainEdgeFrac * innerWidth;
