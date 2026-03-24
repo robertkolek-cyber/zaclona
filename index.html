@@ -501,11 +501,11 @@ function lightAt(nx) {
 }
 
 function updateText(dt) {
-  // Both headline and portfolio fade out together as curtain parts
-  const rawOpacity = 1 - (visualPull - 0.02) / (0.35 - 0.02);
+  // Text stays centered, fades out as curtain parts
+  const rawOpacity = 1 - (visualPull - 0.05) / (0.45 - 0.05);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
   tile.style.opacity = opacity;
-  nameLockup.style.opacity = opacity;
+  nameLockup.style.opacity = visualPull > 0.25 ? opacity : 1;
 }
 
 // ─── Draw loop ───────────────────────────────────────
