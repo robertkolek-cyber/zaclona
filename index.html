@@ -652,7 +652,7 @@ function updateTiles() {
 
   tileCards.forEach((card, i) => {
     const isCTA  = i === TOTAL_ITEMS - 1;
-    const center = (i + 0.5) * step;
+    const center = i * step; // tile 0 peaks at progress=0, already full size when curtain opens
     const start  = center - step * 1.15;
     const end    = center + step * 0.85;
 
