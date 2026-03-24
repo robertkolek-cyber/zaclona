@@ -686,7 +686,7 @@ function updateTiles() {
     }
 
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
-    card.style.opacity   = opacity * curtainPull;
+    card.style.opacity   = opacity * Math.min(1, curtainPull * 8);
     card.style.zIndex    = Math.round(scale * 100);
     card.style.filter    = `blur(${blurPx}px)`;
 
