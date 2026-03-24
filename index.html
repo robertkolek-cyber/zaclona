@@ -356,7 +356,7 @@ let bottomPull = 0, bottomPullVel = 0;
 function updateFoldPull(dt) {
   // Elegant weight: responsive but never snappy. Return is heavier.
   const returning   = scrollPull < curtainPull;
-  const pullSpringK = returning ? 3.0 : 5.0;
+  const pullSpringK = returning ? 6.0 : 5.0;
   const pullDamping = returning ? 3.5 : 4.0;
   const pullAccel = pullSpringK * (scrollPull - curtainPull) - pullDamping * curtainVel;
   curtainVel  += pullAccel * dt;
@@ -513,7 +513,7 @@ function updateText(dt) {
   const rawOpacity = 1 - (visualPull - 0.1) / (0.62 - 0.1);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
   tile.style.opacity = opacity;
-  if (visualPull > 0.35) nameLockup.style.opacity = opacity;
+  nameLockup.style.opacity = visualPull > 0.35 ? opacity : 1;
 
   nameLockup.style.webkitMaskImage = 'none';
   nameLockup.style.maskImage       = 'none';
