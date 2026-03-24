@@ -641,10 +641,12 @@ const dotEls = Array.from(tilesDots.querySelectorAll('.tiles-dot'));
 
 // Gate at tile 0: lock scroll when user first reaches tiles section
 let tile0Gate = true;
+let gateStart = 0; // timestamp when gate fires — drives unblur animation
 window.addEventListener('scroll', () => {
   const tile0Pos = 3 * innerHeight;
   if (tile0Gate && window.scrollY >= tile0Pos) {
     tile0Gate = false;
+    gateStart = performance.now();
     window.scrollTo({ top: tile0Pos, behavior: 'instant' });
     document.documentElement.style.overflow = 'hidden';
     setTimeout(() => {
@@ -661,8 +663,11 @@ function updateTiles() {
   const step    = 1 / TOTAL_ITEMS; // even spacing across 0–1
   const isLarge = innerWidth >= 1440;
 
-  // Blur driven by curtain: starts at 14px, fully sharp when curtain is open
-  const blurPx = Math.max(0, (1 - curtainPull * 2) * 28);
+  // Blur: max of curtain-based blur and gate-based unblur animation
+  const curtainBlur = Math.max(0, (1 - curtainPull * 2) * 28);
+  const gateT = gateStart ? Math.min(1, (performance.now() - gateStart) / 1000) : 1;
+  const gateBlur = (1 - gateT) * 28;
+  const blurPx = Math.max(curtainBlur, gateBlur);
 
   // Dots and tiles hidden behind curtain, revealed as it opens
   tilesDots.style.opacity = curtainPull;
