@@ -400,8 +400,8 @@ function updateFoldPull(dt) {
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     const foldNX = FOLDS[i].relPos;
-    const responsiveness = 0.3 + foldNX * foldNX * 10.0;
-    const foldThreshold = (1.0 - foldNX) * 0.1;
+    const responsiveness = 1.5 + foldNX * foldNX * 6.0;
+    const foldThreshold = (1.0 - foldNX) * 0.04;
     const foldTarget = Math.max(0, Math.min(1, (curtainPull - foldThreshold) / (1.0 - foldThreshold)));
 
     // Reduce neighbor coupling while scrolling — less cascade wave, stiffer fabric
