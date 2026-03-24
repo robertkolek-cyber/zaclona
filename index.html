@@ -175,24 +175,24 @@
 <canvas id="c"></canvas>
 
 <!-- Tile cards — fixed, behind curtain canvas (z:0 < canvas z:1) -->
-<!-- Curtain canvas is transparent where pulled away, revealing tiles beneath -->
-<div class="tile-card" style="background:#1c1c1c;color:#f0ede8;">
+<!-- Invisible until curtain pulls away, then sharpen as it opens -->
+<div class="tile-card" style="background:#E89B69;color:#fff;">
   <span class="tile-tag">Brand Identity</span>
   <h2 class="tile-title">Monolith<br>Studio</h2>
 </div>
-<div class="tile-card" style="background:#1e1528;color:#dfd6f5;">
+<div class="tile-card" style="background:#EFA84F;color:#fff;">
   <span class="tile-tag">Product Design</span>
   <h2 class="tile-title">Vertex<br>App</h2>
 </div>
-<div class="tile-card" style="background:#0f2218;color:#d4eedb;">
+<div class="tile-card" style="background:#E8956F;color:#fff;">
   <span class="tile-tag">Editorial</span>
   <h2 class="tile-title">Current<br>Magazine</h2>
 </div>
-<div class="tile-card" style="background:#101827;color:#c8d8f0;">
+<div class="tile-card" style="background:#DFA172;color:#fff;">
   <span class="tile-tag">Interface Design</span>
   <h2 class="tile-title">Flux<br>Dashboard</h2>
 </div>
-<div class="tile-card" style="background:#231208;color:#f0d8c4;">
+<div class="tile-card" style="background:#EAA876;color:#fff;">
   <span class="tile-tag">Type Design</span>
   <h2 class="tile-title">Forma<br>Typeface</h2>
 </div>
@@ -680,7 +680,7 @@ function updateTiles() {
     }
 
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
-    card.style.opacity   = opacity;
+    card.style.opacity   = opacity * curtainPull;
     card.style.zIndex    = Math.round(scale * 100);
     card.style.filter    = `blur(${blurPx}px)`;
 
