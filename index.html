@@ -267,7 +267,17 @@ function resize() {
   small.width   = Math.round(innerWidth  / SCALE);
   small.height  = Math.round(innerHeight / SCALE);
 }
-window.addEventListener('resize', resize);
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => {
+    resize();
+    tileInitialRight = null;
+    tileInitialEdge  = null;
+    mouseNX = -1;
+    mouseNY = -1;
+  }, 150);
+});
 resize();
 
 // ─── Scroll state with inertia ───────────────────────
@@ -384,27 +394,20 @@ function updateFoldPull(dt) {
   bottomPull  = scrollPull;
   bottomPullVel = 0;
 
-  // Stiffness factor: 0 = idle, 1 = fast scroll — kills wave distortion while scrolling
-  const scrollStiffness = Math.min(1, Math.abs(curtainVel) * 8);
-
   for (let i = 0; i < NUM_FOLDS; i++) {
     const foldNX = FOLDS[i].relPos;
-    const responsiveness = 1.5 + foldNX * foldNX * 6.0;
     const foldThreshold = (1.0 - foldNX) * 0.04;
     const foldTarget = Math.max(0, Math.min(1, (curtainPull - foldThreshold) / (1.0 - foldThreshold)));
 
-    // Reduce neighbor coupling while scrolling — less cascade wave, stiffer fabric
-    const coupling = 0.14 * (1 - scrollStiffness * 0.85);
+    // Neighbor coupling — cascading drape feel, left folds gather slightly ahead
     const left  = i > 0             ? foldPull[i - 1] : foldPull[i];
     const right = i < NUM_FOLDS - 1 ? foldPull[i + 1] : foldPull[i];
-    const coupledTarget = foldTarget * (1 - coupling * 2) + (left + right) * coupling;
+    const coupledTarget = foldTarget * 0.72 + (left + right) * 0.14;
 
-    // Higher damping while scrolling kills oscillations faster
-    const damping = 3.0 + scrollStiffness * 6.0;
-    const accel = responsiveness * (coupledTarget - foldPull[i]) - damping * foldPullVel[i];
-    foldPullVel[i] += accel * dt;
-    foldPull[i]    += foldPullVel[i] * dt;
-    foldPull[i]     = Math.max(0, Math.min(1.2, foldPull[i]));
+    // Lerp — smooth follow, no overshoot or oscillation
+    foldPull[i] += (coupledTarget - foldPull[i]) * Math.min(1, dt * 16);
+    foldPullVel[i] = 0;
+    foldPull[i]    = Math.max(0, Math.min(1.2, foldPull[i]));
   }
 
   // Visual pull — tracks where the curtain actually IS, not where scroll wants it
@@ -515,7 +518,7 @@ function updateText(dt) {
   const rawOpacity = 1 - (visualPull - 0.1) / (0.62 - 0.1);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
   tile.style.opacity = opacity;
-  nameLockup.style.opacity = visualPull > 0.35 ? opacity : 1;
+  nameLockup.style.opacity = Math.max(0, Math.min(1, 1 - (visualPull - 0.35) / (0.62 - 0.35)));
 
   nameLockup.style.webkitMaskImage = 'none';
   nameLockup.style.maskImage       = 'none';
@@ -727,8 +730,9 @@ function updateTiles() {
   const gateBlur = (1 - gateT) * 28;
   const blurPx = Math.max(curtainBlur, gateBlur);
 
-  // Dots and tiles hidden behind curtain, revealed as it opens
-  tilesDots.style.opacity = curtainPull;
+  // Dots and tiles hidden behind curtain, revealed as it opens — shared smooth curve
+  const curtainVis = Math.pow(Math.min(1, curtainPull * 2), 0.7);
+  tilesDots.style.opacity = curtainVis;
 
   let activeDot = -1;
 
@@ -766,8 +770,8 @@ function updateTiles() {
     const grainIntensity = Math.max(0, Math.min(1, (dissolveT - 0.1) / 0.55));
 
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
-    card.style.opacity   = opacity * Math.min(1, curtainPull * 8);
-    card.style.zIndex    = Math.round(scale * 100);
+    card.style.opacity   = opacity * curtainVis;
+    card.style.zIndex    = Math.round(opacity * 100);
     card.style.filter    = `blur(${blurPx + dissolveBlur}px)`;
 
     if (card._noise) {
