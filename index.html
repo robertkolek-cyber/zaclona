@@ -472,11 +472,32 @@ function lightAt(nx) {
 }
 
 // ─── Text animation state ─────────────────────────────
+let tileInitialRight = null;
+let tileInitialEdge  = null;
+
+function alignLockup() {
+  const rect = tile.getBoundingClientRect();
+  nameLockup.style.left = rect.left + 'px';
+}
 
 function updateText(dt) {
+  if (tileInitialRight === null) {
+    tileInitialRight = tile.getBoundingClientRect().right;
+    tileInitialEdge  = curtainEdgeFrac;
+  }
+
+  const curtainShift = (curtainEdgeFrac - tileInitialEdge) * innerWidth;
+  const targetRight  = tileInitialRight + curtainShift;
+  const curtainEdgePx = curtainEdgeFrac * innerWidth;
+  const clampedRight  = Math.min(targetRight, curtainEdgePx);
+
+  tile.style.left      = 'auto';
+  tile.style.right     = Math.max(0, innerWidth - clampedRight) + 'px';
   tile.style.transform = 'translateY(-50%)';
   tile.style.webkitMaskImage = 'none';
   tile.style.maskImage       = 'none';
+
+  alignLockup();
 
   const rawOpacity = 1 - (visualPull - 0.1) / (0.62 - 0.1);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
