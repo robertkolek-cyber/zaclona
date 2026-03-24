@@ -472,43 +472,11 @@ function lightAt(nx) {
 }
 
 // ─── Text animation state ─────────────────────────────
-// Sync lockup left edge to the tile's left edge on each frame
-function alignLockup() {
-  const rect = tile.getBoundingClientRect();
-  nameLockup.style.left = rect.left + 'px';
-}
-
-let tileInitialRight = null;
-let tileInitialEdge  = null;
-let textRight        = null; // smoothed text right edge (px)
 
 function updateText(dt) {
-  // Capture initial anchor once — before any JS moves the tile
-  if (tileInitialRight === null) {
-    tileInitialRight = tile.getBoundingClientRect().right;
-    tileInitialEdge  = curtainEdgeFrac;
-    textRight        = tileInitialRight + innerWidth * 0.03;
-  }
-
-  // Arc shifted right: at rest text is ~12vw right of anchor,
-  // as curtain pulls it drifts left, anchor area is the leftmost point
-  const curtainShift = (curtainEdgeFrac - tileInitialEdge) * innerWidth;
-  const targetRight  = tileInitialRight + innerWidth * 0.03 + curtainShift;
-
-  // Snap directly to target position (no breeze drift)
-  textRight = targetRight;
-
-  // Hard clamp: never extend past the curtain edge
-  const curtainEdgePx = curtainEdgeFrac * innerWidth;
-  const clampedRight  = Math.min(textRight, curtainEdgePx);
-
-  tile.style.left      = 'auto';
-  tile.style.right     = Math.max(0, innerWidth - clampedRight) + 'px';
   tile.style.transform = 'translateY(-50%)';
   tile.style.webkitMaskImage = 'none';
   tile.style.maskImage       = 'none';
-
-  alignLockup();
 
   const rawOpacity = 1 - (visualPull - 0.1) / (0.62 - 0.1);
   const opacity = Math.max(0, Math.min(1, rawOpacity));
