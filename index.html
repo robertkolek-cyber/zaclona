@@ -11,7 +11,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { width: 100%; background: #fff; }
     body { width: 100%; margin: 0; padding: 0; background: #fff; }
-    canvas { position: fixed; inset: 0; display: block; pointer-events: none; z-index: 1; }
+    canvas { position: fixed; inset: 0; display: block; pointer-events: none; z-index: 1000; }
 
     .project-tile {
       position: fixed;
@@ -687,7 +687,7 @@ function updateTiles() {
 
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
     card.style.opacity   = opacity * Math.min(1, curtainPull * 8);
-    card.style.zIndex    = scale > 1 ? 0 : -Math.round((1 - scale) * 100);
+    card.style.zIndex    = Math.round(scale * 100);
     card.style.filter    = `blur(${blurPx}px)`;
 
     // Active dot: switch at 70% bias toward start
