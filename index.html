@@ -371,18 +371,24 @@ function updateFoldPull(dt) {
   bottomPull    += bottomPullVel * dt;
   bottomPull     = Math.max(0, Math.min(1.0, bottomPull));
 
+  // Stiffness factor: 0 = idle, 1 = fast scroll — kills wave distortion while scrolling
+  const scrollStiffness = Math.min(1, Math.abs(curtainVel) * 8);
+
   for (let i = 0; i < NUM_FOLDS; i++) {
     const foldNX = FOLDS[i].relPos;
     const responsiveness = 0.3 + foldNX * foldNX * 10.0;
     const foldThreshold = (1.0 - foldNX) * 0.1;
     const foldTarget = Math.max(0, Math.min(1, (curtainPull - foldThreshold) / (1.0 - foldThreshold)));
 
-    // Neighbors drag each other — cascade wave like real fabric
+    // Reduce neighbor coupling while scrolling — less cascade wave, stiffer fabric
+    const coupling = 0.14 * (1 - scrollStiffness * 0.85);
     const left  = i > 0             ? foldPull[i - 1] : foldPull[i];
     const right = i < NUM_FOLDS - 1 ? foldPull[i + 1] : foldPull[i];
-    const coupledTarget = foldTarget * 0.72 + (left + right) * 0.14;
+    const coupledTarget = foldTarget * (1 - coupling * 2) + (left + right) * coupling;
 
-    const accel = responsiveness * (coupledTarget - foldPull[i]) - 3.0 * foldPullVel[i];
+    // Higher damping while scrolling kills oscillations faster
+    const damping = 3.0 + scrollStiffness * 6.0;
+    const accel = responsiveness * (coupledTarget - foldPull[i]) - damping * foldPullVel[i];
     foldPullVel[i] += accel * dt;
     foldPull[i]    += foldPullVel[i] * dt;
     foldPull[i]     = Math.max(0, Math.min(1.2, foldPull[i]));
@@ -402,7 +408,8 @@ function precomputeRow(ny, t) {
 
   for (let i = 0; i < NUM_FOLDS; i++) {
     const f = FOLDS[i];
-    let fx = f.relPos + swingSmooth[i] * totalHang;
+    const swingScale = 1 - Math.min(1, Math.abs(curtainVel) * 8) * 0.8;
+    let fx = f.relPos + swingSmooth[i] * totalHang * swingScale;
 
     // Mouse breeze — layered: sharp push near cursor + wide trailing wake
     if (windStr > 0.002) {
