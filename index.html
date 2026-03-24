@@ -372,6 +372,7 @@ const foldPull     = new Float32Array(NUM_FOLDS);
 const foldPullVel  = new Float32Array(NUM_FOLDS);
 let visualPull = 0;      // average fold pull — where the curtain visually is
 let curtainEdgeFrac = 1.05; // actual right edge of curtain (0..1+), from prev frame
+let stableCurtainEdge = 1.05; // same but without breeze — for text anchoring
 
 // Vertical drape lag: bottom of curtain hangs behind top
 let bottomPull = 0, bottomPullVel = 0;
@@ -506,12 +507,12 @@ function alignLockup() {
 function updateText(dt) {
   if (tileInitialRight === null) {
     tileInitialRight = tile.getBoundingClientRect().right;
-    tileInitialEdge  = curtainEdgeFrac;
+    tileInitialEdge  = stableCurtainEdge;
   }
 
-  const curtainShift = (curtainEdgeFrac - tileInitialEdge) * innerWidth;
+  const curtainShift = (stableCurtainEdge - tileInitialEdge) * innerWidth;
   const targetRight  = tileInitialRight + curtainShift;
-  const curtainEdgePx = curtainEdgeFrac * innerWidth;
+  const curtainEdgePx = stableCurtainEdge * innerWidth;
   const clampedRight  = Math.min(targetRight, curtainEdgePx);
 
   tile.style.left      = 'auto';
@@ -567,7 +568,25 @@ function draw(ms) {
     }
 
     // Capture curtain edge near the text row (~42% height) for text clipping
-    if (y === Math.round(SH * 0.42)) curtainEdgeFrac = rowMaxFoldX;
+    if (y === Math.round(SH * 0.42)) {
+      curtainEdgeFrac = rowMaxFoldX;
+      // Stable edge: fold base positions + pull only, no breeze/wind/hover
+      const ny42 = 0.42;
+      const ny42sq = ny42 * ny42;
+      const rowPull42 = curtainPull * (1 - ny42sq) + bottomPull * ny42sq;
+      let stableMax = -999;
+      for (let fi = 0; fi < NUM_FOLDS; fi++) {
+        const f = FOLDS[fi];
+        const ep = foldPull[fi] * (1 - ny42sq) + rowPull42 * ny42sq;
+        const gx = -1.2 - (NUM_FOLDS - fi) * 0.015;
+        const sx = f.relPos * (1 - ep) + gx * ep;
+        const blend = Math.pow(ny42, 0.7);
+        const sig = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
+        const edge = sx + sig * 3.0;
+        if (edge > stableMax) stableMax = edge;
+      }
+      stableCurtainEdge = stableMax;
+    }
 
     const vertLight = 1.0 - ny * 0.06;
 
