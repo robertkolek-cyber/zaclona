@@ -391,7 +391,8 @@ function updateFoldPull(dt) {
   // Direct follow — no spring, curtain tracks scroll instantly
   curtainPull = scrollPull;
   curtainVel  = 0;
-  bottomPull  = scrollPull;
+  // Bottom drapes slightly behind top — lerp lag gives the hem its weight
+  bottomPull += (curtainPull - bottomPull) * Math.min(1, dt * 8);
   bottomPullVel = 0;
 
   for (let i = 0; i < NUM_FOLDS; i++) {
@@ -771,7 +772,9 @@ function updateTiles() {
 
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
     card.style.opacity   = opacity * curtainVis;
-    card.style.zIndex    = Math.round(opacity * 100);
+    // Capped-scale × opacity: entering tiles rise naturally (scale < 1),
+    // exiting tiles stay dominant until they fade (scale > 1 capped at 1)
+    card.style.zIndex    = Math.round(Math.min(scale, 1) * opacity * 200);
     card.style.filter    = `blur(${blurPx + dissolveBlur}px)`;
 
     if (card._noise) {
