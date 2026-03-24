@@ -636,7 +636,7 @@ function updateTiles() {
   // Starts at 0 when curtain is done (scrollY = 3×vh), runs 900vh.
   // Tile 0 center = progress 0 → already at full scale the moment curtain opens.
   const progress = Math.max(0, Math.min(1,
-    (window.scrollY - 3 * innerHeight) / (9 * innerHeight)
+    (window.scrollY - 3 * innerHeight) / (5 * innerHeight)
   ));
 
   const step    = 1 / TOTAL_ITEMS; // even spacing across 0–1
@@ -672,10 +672,10 @@ function updateTiles() {
     // Same zoom behavior as before, just offset to two positions
     let tx = 0;
     if (!isCTA) {
-      const even = i % 2 === 0;
-      const anchor = even ? -8 : 8;
+      const right = i % 2 === 0; // tile 0 starts RIGHT
+      const anchor = right ? 8 : -8;
       tx = interpolate(progress, [start, center, end],
-        [anchor, anchor, even ? -250 : 250]);
+        [anchor, anchor, right ? 250 : -250]);
     }
 
     card.style.transform = `translate(-50%, -50%) translateX(${tx}vw) scale(${scale})`;
