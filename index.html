@@ -608,7 +608,6 @@ function draw(ms) {
   ctx.fillStyle = hem;
   ctx.fillRect(0, H * 0.85, W, H * 0.15);
 
-  updateTilesProgress(dt);
   updateTiles();
   requestAnimationFrame(draw);
 }
@@ -640,21 +639,24 @@ tileCards.forEach(() => {
 });
 const dotEls = Array.from(tilesDots.querySelectorAll('.tiles-dot'));
 
-// Velocity-capped tiles progress — fast scrollers can't skip projects
-let tilesProgress = 0;
-const TILES_MAX_SPEED = 0.4; // max progress change per second
-
-function updateTilesProgress(dt) {
-  const target = Math.max(0, Math.min(1,
-    (window.scrollY - 3 * innerHeight) / (5 * innerHeight)
-  ));
-  const diff = target - tilesProgress;
-  const maxStep = TILES_MAX_SPEED * dt;
-  tilesProgress += Math.max(-maxStep, Math.min(maxStep, diff));
-}
+// Gate at tile 0: lock scroll when user first reaches tiles section
+let tile0Gate = true;
+window.addEventListener('scroll', () => {
+  const tile0Pos = 3 * innerHeight;
+  if (tile0Gate && window.scrollY >= tile0Pos) {
+    tile0Gate = false;
+    window.scrollTo({ top: tile0Pos, behavior: 'instant' });
+    document.documentElement.style.overflow = 'hidden';
+    setTimeout(() => {
+      document.documentElement.style.overflow = '';
+    }, 1200);
+  }
+});
 
 function updateTiles() {
-  const progress = tilesProgress;
+  const progress = Math.max(0, Math.min(1,
+    (window.scrollY - 3 * innerHeight) / (5 * innerHeight)
+  ));
 
   const step    = 1 / TOTAL_ITEMS; // even spacing across 0–1
   const isLarge = innerWidth >= 1440;
