@@ -466,6 +466,18 @@ function precomputeRow(ny, t) {
       sigma *= 1.0 + windStr * (env1 * 0.22 + env2 * 0.14);
     }
 
+    // Gathering compression: fabric tightens and bunches at the disappearing left edge.
+    // As folds approach x=0 they compress against already-gathered cloth,
+    // creating tighter shadow lines and a slightly thickened silhouette.
+    if (effectivePull > 0.05 && fx < 0.17) {
+      const gatherProx = Math.max(0, 1 - Math.max(fx, 0) / 0.17);
+      const compress   = gatherProx * Math.min(effectivePull, 0.92) * 0.52;
+      sigma *= (1 - compress);
+      if (sigma < 0.006) sigma = 0.006;
+      // Folds resist being gathered — a slight outward push thickens the edge
+      fx += gatherProx * effectivePull * 0.022;
+    }
+
     ROW_DATA[i * 2]     = fx;
     ROW_DATA[i * 2 + 1] = sigma * sigma;
   }
