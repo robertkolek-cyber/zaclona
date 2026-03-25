@@ -392,7 +392,7 @@ function updateFoldPull(dt) {
   curtainPull = scrollPull;
   curtainVel  = 0;
   // Bottom drapes slightly behind top — lerp lag gives the hem its weight
-  bottomPull += (curtainPull - bottomPull) * Math.min(1, dt * 8);
+  bottomPull += (curtainPull - bottomPull) * Math.min(1, dt * 5);
   bottomPullVel = 0;
 
   for (let i = 0; i < NUM_FOLDS; i++) {
@@ -400,13 +400,14 @@ function updateFoldPull(dt) {
     const foldThreshold = (1.0 - foldNX) * 0.04;
     const foldTarget = Math.max(0, Math.min(1, (curtainPull - foldThreshold) / (1.0 - foldThreshold)));
 
-    // Neighbor coupling — cascading drape feel, left folds gather slightly ahead
+    // Neighbor coupling — wave propagates across the fabric
     const left  = i > 0             ? foldPull[i - 1] : foldPull[i];
     const right = i < NUM_FOLDS - 1 ? foldPull[i + 1] : foldPull[i];
-    const coupledTarget = foldTarget * 0.72 + (left + right) * 0.14;
+    const coupledTarget = foldTarget * 0.64 + (left + right) * 0.18;
 
-    // Lerp — smooth follow, no overshoot or oscillation
-    foldPull[i] += (coupledTarget - foldPull[i]) * Math.min(1, dt * 16);
+    // Speed varies by horizontal position: left folds lead, right folds trail — natural gather sweep
+    const lerpSpeed = 7 + (1 - foldNX) * 7;
+    foldPull[i] += (coupledTarget - foldPull[i]) * Math.min(1, dt * lerpSpeed);
     foldPullVel[i] = 0;
     foldPull[i]    = Math.max(0, Math.min(1.2, foldPull[i]));
   }
