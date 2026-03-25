@@ -467,15 +467,16 @@ function precomputeRow(ny, t) {
     }
 
     // Gathering compression: fabric tightens and bunches at the disappearing left edge.
-    // As folds approach x=0 they compress against already-gathered cloth,
-    // creating tighter shadow lines and a slightly thickened silhouette.
-    if (effectivePull > 0.05 && fx < 0.17) {
-      const gatherProx = Math.max(0, 1 - Math.max(fx, 0) / 0.17);
-      const compress   = gatherProx * Math.min(effectivePull, 0.92) * 0.52;
-      sigma *= (1 - compress);
-      if (sigma < 0.006) sigma = 0.006;
-      // Folds resist being gathered — a slight outward push thickens the edge
-      fx += gatherProx * effectivePull * 0.022;
+    // As folds approach x=0 they compress against already-gathered cloth.
+    // gatherStrength ramps quickly so compression is strong even at low effectivePull —
+    // the previous formula multiplied by effectivePull which was always small in this zone.
+    if (effectivePull > 0.04 && fx < 0.18) {
+      const gatherProx    = Math.max(0, 1 - Math.max(fx, 0) / 0.18);
+      const gatherStrength = Math.min(1, effectivePull / 0.18); // full strength by ep=0.18
+      const compress      = gatherProx * gatherStrength * 0.62;
+      sigma = Math.max(0.006, sigma * (1 - compress));
+      // Folds resist compression — slight rightward bulge thickens the gathering edge
+      fx += gatherProx * gatherStrength * 0.038;
     }
 
     ROW_DATA[i * 2]     = fx;
@@ -492,11 +493,16 @@ function lightAt(nx) {
     const s2  = ROW_DATA[i * 2 + 1];
     const d   = nx - fx;
     const d2  = d * d;
-    light -= FOLDS[i].depth / (1 + d2 / s2);
+    // Gathering folds cast heavier shadows — compressed cloth is denser
+    const gatherBoost = (fx > -0.02 && fx < 0.18)
+      ? 1 + Math.max(0, 1 - Math.max(fx, 0) / 0.18) * 0.55
+      : 1;
+    const depth = FOLDS[i].depth * gatherBoost;
+    light -= depth / (1 + d2 / s2);
     const sigma = Math.sqrt(s2);
     const hd    = d - sigma * 0.68;
     const hs2   = s2 * 0.25;
-    light += (FOLDS[i].depth * 1.00) / (1 + (hd * hd) / hs2);
+    light += depth / (1 + (hd * hd) / hs2);
   }
   return light;
 }
