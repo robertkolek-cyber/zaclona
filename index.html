@@ -22,19 +22,12 @@
       text-align: left;
       pointer-events: none;
       will-change: transform, opacity;
-      mix-blend-mode: difference;
     }
 
     /* ── Word-mask rise ── */
     @keyframes word-rise {
       from { transform: translateY(108%); }
       to   { transform: translateY(0); }
-    }
-
-    /* ── Difference blend materialises as color goes black→white ── */
-    @keyframes blend-appear {
-      from { color: #000; }
-      to   { color: #fff; }
     }
 
     /* ── Subtitle slides up + fades ── */
@@ -52,8 +45,6 @@
       letter-spacing: -0.02em;
       white-space: nowrap;
       margin-bottom: clamp(10px, 1.4vw, 20px);
-      /* blend materialises over the full word-rise duration */
-      animation: blend-appear 1.8s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards;
     }
 
     /* Each word is clipped by overflow:hidden on the outer span */
@@ -74,7 +65,7 @@
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: clamp(10px, 1.1vw, 14px);
       font-weight: 500;
-      color: #fff;
+      color: #000;
       letter-spacing: 0.09em;
       text-transform: uppercase;
       text-align: right;
@@ -93,9 +84,7 @@
       white-space: nowrap;
       z-index: 1001;
       pointer-events: none;
-      mix-blend-mode: difference;
       will-change: transform, opacity;
-      animation: blend-appear 1.4s cubic-bezier(0.16, 1, 0.3, 1) 2.0s forwards;
     }
     .name-lockup .word { display: inline-block; overflow: hidden; vertical-align: bottom; }
     .name-lockup .wi {
