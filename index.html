@@ -451,19 +451,19 @@ function precomputeRow(ny, t) {
     // Horizontal cascade from foldPull[i], blended with row vertical lag
     const effectivePull = foldPull[i] * (1 - ny2) + rowPull * ny2;
 
-    // Two-phase gathering: folds stage at a per-fold edge position before exiting.
-    // Phase 1 (ep 0→0.48): move from rest into the gathering zone.
-    // Phase 2 (ep 0.48→1): compress through the zone and exit off-screen.
-    // Each fold's edge is slightly staggered → organic, irregular bunching.
-    const gatheredX   = -1.2 - (NUM_FOLDS - i) * 0.015;
-    const gatherEdgeX = 0.022 + (1 - foldNX) * 0.058 + Math.sin(f.phase * 2.1) * 0.013;
-    if (effectivePull < 0.48) {
-      const t      = effectivePull / 0.48;
-      const smooth = t * t * (3 - 2 * t);     // smoothstep ease into edge
-      fx = fx * (1 - smooth) + gatherEdgeX * smooth;
+    // Linear base movement — fold slides from rest to gathered position
+    const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
+    const linearFx  = fx * (1 - effectivePull) + gatheredX * effectivePull;
+
+    // Gathering resistance: folds that have just crossed x≈0 get pushed back,
+    // piling up at the edge before exiting. Per-fold stagger creates organic bunching.
+    // Only the narrow transition window [-0.12 → gatherEdgeX] is affected —
+    // right-side folds (linearFx > edge) and deep folds (linearFx < -0.12) are unchanged.
+    const gatherEdgeX = 0.016 + (1 - foldNX) * 0.042 + Math.sin(f.phase * 2.1) * 0.011;
+    if (effectivePull < 0.74 && linearFx < gatherEdgeX && linearFx > -0.12) {
+      fx = linearFx + (gatherEdgeX - linearFx) * 0.74;
     } else {
-      const t = (effectivePull - 0.48) / 0.52;
-      fx = gatherEdgeX * (1 - t) + gatheredX * t;
+      fx = linearFx;
     }
 
     const blend = Math.pow(ny, 0.7);
