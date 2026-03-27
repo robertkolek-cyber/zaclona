@@ -640,10 +640,8 @@ function draw(ms) {
   ctx.fillStyle = hem;
   ctx.fillRect(0, H * 0.85, W, H * 0.15);
 
-  // Fade the curtain as it retreats — stays solid longer, melts at the end
-  // Cubic ease: opacity=1 at rest, 0 when curtain is gone
-  const fadeT = Math.max(0, Math.min(1, visualPull / 0.85));
-  canvas.style.opacity = 1 - fadeT * fadeT * (3 - 2 * fadeT);
+  // Curtain fades as it retreats — immediate, linear, fully gone by 80% pull
+  canvas.style.opacity = Math.max(0, 1 - curtainPull * 1.25);
 
   updateTiles();
   requestAnimationFrame(draw);
