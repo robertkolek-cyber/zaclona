@@ -261,8 +261,6 @@ window.addEventListener('resize', () => {
   clearTimeout(_resizeTimer);
   _resizeTimer = setTimeout(() => {
     resize();
-    tileInitialRight = null;
-    tileInitialEdge  = null;
     mouseNX = -1;
     mouseNY = -1;
   }, 150);
@@ -379,8 +377,8 @@ let bottomPull = 0, bottomPullVel = 0;
 function updateFoldPull(dt) {
   curtainPull = scrollPull;
   curtainVel  = 0;
-  // Hem lags slightly behind — the bottom of the curtain is heavier, lifts last
-  bottomPull += (curtainPull - bottomPull) * Math.min(1, dt * 4);
+  // Hem lags behind — visible fabric weight, heavy bottom edge
+  bottomPull += (curtainPull - bottomPull) * Math.min(1, dt * 2.5);
   bottomPullVel = 0;
   // foldPull drives fold x-swing amplitude (dampens as curtain rises)
   for (let i = 0; i < NUM_FOLDS; i++) {
@@ -417,9 +415,16 @@ function precomputeRow(ny, t) {
       fx += Math.sin(t * 1.5 + f.phase * 1.4) * prox * 0.014 * totalHang;
     }
 
-    // Folds stay in x — curtain rises vertically, folds don't move left
     const blend = Math.pow(ny, 0.7);
     let sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
+
+    // Near the bottom edge, fabric drapes looser — folds billow outward
+    const hemBase = 1.0 - bottomPull;
+    const hemDist = hemBase - ny;
+    if (hemDist > 0 && hemDist < 0.15) {
+      const hemProx = 1 - hemDist / 0.15;
+      sigma *= 1 + hemProx * 0.45;
+    }
 
     // Sigma swell — folds billow where wind and wake touch
     if (windStr > 0.002) {
@@ -444,11 +449,7 @@ function lightAt(nx) {
     const s2  = ROW_DATA[i * 2 + 1];
     const d   = nx - fx;
     const d2  = d * d;
-    // Gathering folds cast heavier shadows — compressed cloth is denser
-    const gatherBoost = (fx > -0.02 && fx < 0.18)
-      ? 1 + Math.max(0, 1 - Math.max(fx, 0) / 0.18) * 0.55
-      : 1;
-    const depth = FOLDS[i].depth * gatherBoost;
+    const depth = FOLDS[i].depth;
     light -= depth / (1 + d2 / s2);
     const sigma = Math.sqrt(s2);
     const hd    = d - sigma * 0.68;
@@ -460,10 +461,14 @@ function lightAt(nx) {
 
 // ─── Text animation state ─────────────────────────────
 function updateText(dt) {
-  // Curtain rises vertically — text is fixed, just fades out as curtain lifts
-  const rawOpacity = 1 - (visualPull - 0.1) / (0.62 - 0.1);
-  tile.style.opacity       = Math.max(0, Math.min(1, rawOpacity));
-  nameLockup.style.opacity = Math.max(0, Math.min(1, 1 - (visualPull - 0.35) / (0.62 - 0.35)));
+  // Text drifts upward with the curtain — as if printed on the fabric
+  const lift = curtainPull * 38; // vh units
+  tile.style.transform       = `translateY(calc(-50% - ${lift}vh))`;
+  nameLockup.style.transform = `translateY(-${lift * 0.5}vh)`;
+
+  // Fade as curtain lifts past
+  tile.style.opacity       = Math.max(0, Math.min(1, 1 - (visualPull - 0.08) / 0.50));
+  nameLockup.style.opacity = Math.max(0, Math.min(1, 1 - (visualPull - 0.25) / 0.35));
 }
 
 // ─── Draw loop ───────────────────────────────────────
@@ -488,22 +493,26 @@ function draw(ms) {
   updateFoldPull(dt);
   updateText(dt);
 
-  // Precompute hem Y per column — scallop from fold positions + wind flutter
-  // Hem is where the curtain's bottom edge is; it rises as curtain lifts.
+  // Precompute hem Y per column — scalloped bottom edge, like real draped fabric.
+  // Each fold acts as an attachment point; fabric hangs in catenary arcs between them.
+  const hemBase = 1.0 - bottomPull;
   const hemY = new Float32Array(SW);
   for (let x = 0; x < SW; x++) {
     const nx = x / SW;
-    const base = 1.0 - bottomPull;  // curtain bottom, lagging behind top
-    let scallop = 0;
+    // Sum proximity to folds — peaks below each fold, valleys between
+    let hangWeight = 0;
     for (let fi = 0; fi < NUM_FOLDS; fi++) {
       const dx = nx - FOLDS[fi].relPos;
-      // Fabric hangs slightly lower beneath each fold (attached to fold mass)
-      scallop += FOLDS[fi].sigmaB * Math.exp(-dx * dx / 0.006);
+      hangWeight += FOLDS[fi].depth * Math.exp(-dx * dx / 0.002);
     }
-    const windFlutter = windStr * 0.018 * Math.sin(nx * Math.PI * 4 + t * 1.2);
-    hemY[x] = base + Math.min(0.05, scallop * 0.14) + windFlutter;
+    // Fabric hangs lower beneath folds (catenary), rises between them
+    // Scale by how far the curtain has risen — scallop deepens as fabric gathers
+    const scallop = hangWeight * 0.055 * (1 + curtainPull * 0.8);
+    // Gentle wind flutter at the hem edge
+    const flutter = windStr * 0.012 * Math.sin(nx * Math.PI * 5 + t * 1.5);
+    hemY[x] = hemBase + scallop + flutter;
   }
-  stableCurtainEdge = 1.0 - curtainPull;  // stable hem (no scallop) for text
+  stableCurtainEdge = hemBase;
 
   for (let y = 0; y < SH; y++) {
     const ny = y / SH;
@@ -514,8 +523,8 @@ function draw(ms) {
     for (let x = 0; x < SW; x++) {
       const nx  = x / SW;
 
-      // Alpha: opaque above hem, transparent below
-      const edgeFade = Math.max(0, Math.min(1, (hemY[x] - ny) / 0.010));
+      // Alpha: opaque above hem, soft fade to transparent at bottom edge
+      const edgeFade = Math.max(0, Math.min(1, (hemY[x] - ny) / 0.025));
       const alpha = Math.round(edgeFade * 255);
       const idx   = (y * SW + x) * 4;
 
@@ -526,7 +535,9 @@ function draw(ms) {
       }
 
       const lum = lightAt(nx) * vertLight;
-      const l   = Math.max(0, Math.min(1.20, lum));
+      // Near the hem, fabric is thicker (folded over) — slightly darker
+      const hemDarken = edgeFade < 0.3 ? 1 - (1 - edgeFade / 0.3) * 0.18 : 1;
+      const l   = Math.max(0, Math.min(1.20, lum * hemDarken));
 
       const breathe   = Math.sin(t * 0.06) * 0.12 + Math.sin(t * 0.025) * 0.08;
       const warmZone  = nx * 0.35 + (1.0 - ny) * 0.45 + breathe;
