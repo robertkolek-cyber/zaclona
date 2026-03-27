@@ -459,7 +459,7 @@ function precomputeRow(ny, t) {
     // Folds still on-screen (linearFx > 0) are NEVER touched — they define the curtain edge.
     // Deep off-screen folds (linearFx < -0.12) pass through freely.
     // Only the just-off-screen window (-0.12 → 0) is held near the visible edge.
-    const gatherEdgeX = 0.014 + (1 - foldNX) * 0.038 + Math.sin(f.phase * 2.1) * 0.010;
+    const gatherEdgeX = 0.014 + (1 - f.relPos) * 0.038 + Math.sin(f.phase * 2.1) * 0.010;
     if (effectivePull > 0.04 && linearFx < 0 && linearFx > -0.12) {
       fx = linearFx + (gatherEdgeX - linearFx) * 0.76;
     } else {
