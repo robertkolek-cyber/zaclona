@@ -556,7 +556,7 @@ function draw(ms) {
   updateText(dt);
 
   // Global fade: curtain becomes transparent as it retreats
-  const curtainFade = Math.max(0, 1 - curtainPull * 1.25);
+  const curtainFade = Math.max(0, 1 - curtainPull * 1.43); // fully gone by pull=0.70
 
   for (let y = 0; y < SH; y++) {
     const ny = y / SH;
