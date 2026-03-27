@@ -555,6 +555,9 @@ function draw(ms) {
   updateFoldPull(dt);
   updateText(dt);
 
+  // Global fade: curtain becomes transparent as it retreats
+  const curtainFade = Math.max(0, 1 - curtainPull * 1.25);
+
   for (let y = 0; y < SH; y++) {
     const ny = y / SH;
     precomputeRow(ny, t);
@@ -607,7 +610,7 @@ function draw(ms) {
       const b = Math.min(255, Math.round(105 + l * 150 - peach * 22));
 
       const edgeFade = Math.max(0, Math.min(1, (rowMaxFoldX - nx) / 0.006));
-      const alpha = Math.round(edgeFade * 255);
+      const alpha = Math.round(edgeFade * curtainFade * 255);
 
       const idx   = (y * SW + x) * 4;
       data[idx]   = r;
@@ -625,7 +628,8 @@ function draw(ms) {
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(small, 0, 0, W, H);
 
-  // Rod shadow
+  // Rod shadow — fades with curtain
+  ctx.globalAlpha = curtainFade;
   const rod = ctx.createLinearGradient(0, 0, 0, H * 0.06);
   rod.addColorStop(0,   'rgba(140,148,170,0.22)');
   rod.addColorStop(0.5, 'rgba(140,148,170,0.05)');
@@ -633,15 +637,13 @@ function draw(ms) {
   ctx.fillStyle = rod;
   ctx.fillRect(0, 0, W, H * 0.06);
 
-  // Hem glow
+  // Hem glow — fades with curtain
   const hem = ctx.createLinearGradient(0, H * 0.85, 0, H);
   hem.addColorStop(0, 'rgba(240,175,110,0)');
   hem.addColorStop(1, 'rgba(240,175,110,0.14)');
   ctx.fillStyle = hem;
   ctx.fillRect(0, H * 0.85, W, H * 0.15);
-
-  // Curtain fades as it retreats — immediate, linear, fully gone by 80% pull
-  canvas.style.opacity = Math.max(0, 1 - curtainPull * 1.25);
+  ctx.globalAlpha = 1;
 
   updateTiles();
   requestAnimationFrame(draw);
