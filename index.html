@@ -455,13 +455,13 @@ function precomputeRow(ny, t) {
     const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
     const linearFx  = fx * (1 - effectivePull) + gatheredX * effectivePull;
 
-    // Gathering resistance: folds that have just crossed x≈0 get pushed back,
-    // piling up at the edge before exiting. Per-fold stagger creates organic bunching.
-    // Only the narrow transition window [-0.12 → gatherEdgeX] is affected —
-    // right-side folds (linearFx > edge) and deep folds (linearFx < -0.12) are unchanged.
-    const gatherEdgeX = 0.016 + (1 - foldNX) * 0.042 + Math.sin(f.phase * 2.1) * 0.011;
-    if (effectivePull < 0.74 && linearFx < gatherEdgeX && linearFx > -0.12) {
-      fx = linearFx + (gatherEdgeX - linearFx) * 0.74;
+    // Gathering resistance: only folds that have just crossed x=0 get pulled back.
+    // Folds still on-screen (linearFx > 0) are NEVER touched — they define the curtain edge.
+    // Deep off-screen folds (linearFx < -0.12) pass through freely.
+    // Only the just-off-screen window (-0.12 → 0) is held near the visible edge.
+    const gatherEdgeX = 0.014 + (1 - foldNX) * 0.038 + Math.sin(f.phase * 2.1) * 0.010;
+    if (effectivePull > 0.04 && linearFx < 0 && linearFx > -0.12) {
+      fx = linearFx + (gatherEdgeX - linearFx) * 0.76;
     } else {
       fx = linearFx;
     }
@@ -478,12 +478,12 @@ function precomputeRow(ny, t) {
       sigma *= 1.0 + windStr * (env1 * 0.22 + env2 * 0.14);
     }
 
-    // Gathering compression: folds tighten as they arrive at the bunching edge
-    if (effectivePull > 0.04 && fx < 0.22) {
-      const gatherProx     = Math.max(0, 1 - Math.max(fx, 0) / 0.22);
-      const gatherStrength = Math.min(1, effectivePull / 0.20);
-      const compress       = gatherProx * gatherStrength * 0.68;
-      sigma = Math.max(0.006, sigma * (1 - compress));
+    // Gathering compression: tighten only folds that have been pulled into the gathering zone
+    if (effectivePull > 0.04 && fx >= 0 && fx < 0.12) {
+      const gatherProx     = 1 - fx / 0.12;
+      const gatherStrength = Math.min(1, effectivePull / 0.18);
+      const compress       = gatherProx * gatherStrength * 0.65;
+      sigma = Math.max(0.008, sigma * (1 - compress));
     }
 
     ROW_DATA[i * 2]     = fx;
