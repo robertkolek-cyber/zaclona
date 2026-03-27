@@ -450,21 +450,9 @@ function precomputeRow(ny, t) {
     const rowPull = curtainPull * (1 - ny2) + bottomPull * ny2;
     // Horizontal cascade from foldPull[i], blended with row vertical lag
     const effectivePull = foldPull[i] * (1 - ny2) + rowPull * ny2;
-
-    // Linear base movement — fold slides from rest to gathered position
+    // Slide folds off-screen left (gathered), staggered per fold
     const gatheredX = -1.2 - (NUM_FOLDS - i) * 0.015;
-    const linearFx  = fx * (1 - effectivePull) + gatheredX * effectivePull;
-
-    // Gathering resistance: only folds that have just crossed x=0 get pulled back.
-    // Folds still on-screen (linearFx > 0) are NEVER touched — they define the curtain edge.
-    // Deep off-screen folds (linearFx < -0.12) pass through freely.
-    // Only the just-off-screen window (-0.12 → 0) is held near the visible edge.
-    const gatherEdgeX = 0.014 + (1 - f.relPos) * 0.038 + Math.sin(f.phase * 2.1) * 0.010;
-    if (effectivePull > 0.04 && linearFx < 0 && linearFx > -0.12) {
-      fx = linearFx + (gatherEdgeX - linearFx) * 0.76;
-    } else {
-      fx = linearFx;
-    }
+    fx = fx * (1 - effectivePull) + gatheredX * effectivePull;
 
     const blend = Math.pow(ny, 0.7);
     let sigma = f.sigmaT + (f.sigmaB - f.sigmaT) * blend;
@@ -478,12 +466,17 @@ function precomputeRow(ny, t) {
       sigma *= 1.0 + windStr * (env1 * 0.22 + env2 * 0.14);
     }
 
-    // Gathering compression: tighten only folds that have been pulled into the gathering zone
-    if (effectivePull > 0.04 && fx >= 0 && fx < 0.12) {
-      const gatherProx     = 1 - fx / 0.12;
-      const gatherStrength = Math.min(1, effectivePull / 0.18);
-      const compress       = gatherProx * gatherStrength * 0.65;
-      sigma = Math.max(0.008, sigma * (1 - compress));
+    // Gathering compression: fabric tightens and bunches at the disappearing left edge.
+    // As folds approach x=0 they compress against already-gathered cloth.
+    // gatherStrength ramps quickly so compression is strong even at low effectivePull —
+    // the previous formula multiplied by effectivePull which was always small in this zone.
+    if (effectivePull > 0.04 && fx < 0.18) {
+      const gatherProx    = Math.max(0, 1 - Math.max(fx, 0) / 0.18);
+      const gatherStrength = Math.min(1, effectivePull / 0.18); // full strength by ep=0.18
+      const compress      = gatherProx * gatherStrength * 0.62;
+      sigma = Math.max(0.006, sigma * (1 - compress));
+      // Folds resist compression — slight rightward bulge thickens the gathering edge
+      fx += gatherProx * gatherStrength * 0.038;
     }
 
     ROW_DATA[i * 2]     = fx;
@@ -501,8 +494,8 @@ function lightAt(nx) {
     const d   = nx - fx;
     const d2  = d * d;
     // Gathering folds cast heavier shadows — compressed cloth is denser
-    const gatherBoost = (fx > -0.02 && fx < 0.22)
-      ? 1 + Math.max(0, 1 - Math.max(fx, 0) / 0.22) * 0.75
+    const gatherBoost = (fx > -0.02 && fx < 0.18)
+      ? 1 + Math.max(0, 1 - Math.max(fx, 0) / 0.18) * 0.55
       : 1;
     const depth = FOLDS[i].depth * gatherBoost;
     light -= depth / (1 + d2 / s2);
